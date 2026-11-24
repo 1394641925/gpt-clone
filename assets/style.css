@@ -128,8 +128,10 @@ svg{display:block}
 .chat-scroll{flex:1;overflow-y:auto;scroll-behavior:smooth}
 .messages{max-width:768px;margin:0 auto;padding:28px 20px 40px;min-height:100%;display:flex;flex-direction:column}
 .empty-state{margin:auto;text-align:center;color:var(--text);animation:fadeUp .4s var(--ease)}
-.logo-mark{width:52px;height:52px;margin:0 auto 18px;border-radius:14px;background:var(--bg-2);border:1px solid var(--line-2);
-  display:flex;align-items:center;justify-content:center;color:var(--text)}
+.logo-mark{width:44px;height:44px;margin:0 auto 20px;display:flex;align-items:center;justify-content:center}
+.logo-mark img{display:block;width:30px;height:30px}
+html:not(.dark) .logo-mark img{filter:none}
+html.dark .logo-mark img{filter:invert(1)}
 .empty-state h2{font-size:23px;font-weight:600;margin-bottom:8px}
 .empty-state p{font-size:14px;color:var(--text-3)}
 
@@ -146,6 +148,10 @@ svg{display:block}
 .user-att span{display:inline-flex;align-items:center;gap:5px;font-size:12px;background:rgba(0,0,0,.05);padding:4px 9px;border-radius:8px}
 html.dark .user-att span{background:rgba(255,255,255,.08)}
 .user-att svg{width:13px;height:13px}
+.user-att .att-file b{font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-att .att-file em{font-style:normal;font-size:10px;color:var(--text-3);background:var(--hover);padding:1px 5px;border-radius:5px}
+.user-att .att-img{padding:0;overflow:hidden;background:none!important;line-height:0}
+.user-att .att-img img{width:96px;height:96px;object-fit:cover;border-radius:9px;border:1px solid var(--line)}
 
 /* 思考/生成等待动画 */
 .dots{display:inline-flex;gap:3px;vertical-align:middle}
@@ -177,7 +183,8 @@ html.dark .search-badge{color:#7db2ff;background:rgba(125,178,255,.12)}
 .think-ico{color:var(--text-3);display:flex}
 .think-caret{margin-left:auto;transition:transform .25s var(--ease);color:var(--text-3)}
 .think-panel[open] .think-caret{transform:rotate(180deg)}
-.think-body{font-size:13px;color:var(--text-3);line-height:1.7;padding-top:8px;white-space:pre-wrap;word-break:break-word;overflow:hidden}
+.think-body{font-size:13px;color:var(--text-3);line-height:1.85;padding-top:8px;white-space:pre-wrap;word-break:break-word;overflow:hidden}
+.think-body.typing{color:var(--text-2)}
 .think-panel[open] .think-body{animation:slideDown .28s var(--ease)}
 
 /* 来源卡片 */
