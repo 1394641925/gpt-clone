@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="light">
-<div class="app">
+<div class="app" id="app">
 
   <!-- ===== 标题栏 ===== -->
   <header class="titlebar">
@@ -59,18 +59,18 @@
 
       <div class="side-bottom">
         <button class="side-link" id="exploreBtn">
-          <svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h10"/></svg>
+          <svg viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="3" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
           <span>探索 GPT</span>
         </button>
         <button class="side-link" id="themeBtn">
-          <svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 3a9 9 0 1 0 9 9c0-.5-.04-1-.12-1.5A7 7 0 0 1 12 3z"/></svg>
+          <svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 3a9 9 0 1 0 9 9c0-.5-.04-1-.12-1.5A7 7 0 0 1 12 3z"/></svg>
           <span id="themeLabel">深色模式</span>
         </button>
-        <div class="account" id="accountBtn">
-          <div class="avatar">U</div>
-          <div class="acct-info"><b>用户</b><span>Free</span></div>
+        <button class="account" id="accountBtn" title="登录（暂未开放）">
+          <div class="avatar" id="acctAvatar">U</div>
+          <div class="acct-info"><b>用户</b><span id="acctPlan">登录以同步 · 暂未开放</span></div>
           <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M7 10l5 5 5-5"/></svg>
-        </div>
+        </button>
       </div>
     </aside>
 
@@ -82,7 +82,7 @@
       <button class="rail-btn" id="railNew" title="新对话">
         <svg viewBox="0 0 24 24" width="19" height="19"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg>
       </button>
-      <div class="rail-avatar">U</div>
+      <div class="rail-avatar" id="railAvatar">U</div>
     </div>
 
     <!-- 中间对话区 -->
@@ -96,30 +96,25 @@
           <button class="icon-btn" id="renameTitleBtn" title="重命名对话">
             <svg viewBox="0 0 24 24" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5z"/></svg>
           </button>
-          <button class="icon-btn" id="moreBtn" title="更多">
+          <button class="icon-btn" id="moreBtn" title="对话选项">
             <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></svg>
           </button>
           <button class="icon-btn" id="canvasToggle" title="画布面板">
             <svg viewBox="0 0 24 24" width="18" height="18"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" d="M15 4v16"/></svg>
           </button>
         </div>
+        <div class="dropdown" id="moreDropdown"></div>
       </div>
 
       <div class="chat-scroll" id="chatScroll">
         <div class="messages" id="messages">
-          <!-- 空状态：中央欢迎语 -->
-          <div class="empty-state" id="emptyState">
-            <div class="logo-mark">
-              <svg viewBox="0 0 24 24" width="30" height="30"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2z"/></svg>
-            </div>
-            <h2>有什么可以帮忙的？</h2>
-            <p>开始一段新的对话吧</p>
-          </div>
+          <!-- 由 app.js 渲染 -->
         </div>
       </div>
 
       <div class="composer-wrap">
         <div class="composer" id="composer">
+          <div class="attach-row" id="attachRow" hidden></div>
           <textarea id="msgInput" rows="1" placeholder="询问 ChatGPT" autocomplete="off"></textarea>
           <div class="composer-bar">
             <div class="cb-left">
@@ -127,16 +122,17 @@
                 <svg viewBox="0 0 24 24" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
               </button>
               <button class="cb-chip" id="toolChip" title="工具">
-                <svg viewBox="0 0 24 24" width="15" height="15"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 7h16M4 12h10M4 17h16"/></svg>
+                <svg viewBox="0 0 24 24" width="15" height="15"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M4 7h16M4 12h10M4 17h16"/><circle cx="16" cy="12" r="2" fill="currentColor"/></svg>
                 <span>工具</span>
               </button>
+              <div class="dropdown up" id="toolDropdown"></div>
             </div>
             <div class="cb-right">
-              <button class="mode-btn" id="deepThinkBtn" title="深度思考">
+              <button class="mode-btn" id="deepThinkBtn" title="深度思考：让模型先推理再回答">
                 <svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3a6 6 0 0 0-3.5 10.9c.6.4.9 1 .9 1.7V17h5.2v-1.4c0-.7.3-1.3.9-1.7A6 6 0 0 0 12 3zM9.5 20h5M10 17v3M14 17v3"/></svg>
                 <span>深度思考</span>
               </button>
-              <button class="mode-btn" id="webSearchBtn" title="联网搜索">
+              <button class="mode-btn" id="webSearchBtn" title="联网搜索：先搜索网页再回答">
                 <svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
                 <span>搜索</span>
               </button>
@@ -159,13 +155,17 @@
       <!-- 右侧画布面板 -->
       <aside class="canvas hidden" id="canvasPanel">
         <div class="canvas-card">
-          <div class="cc-row">
+          <div class="cc-row" id="ccCreate">
             <div><b>创建内容</b><span>创建文件或站点</span></div>
-            <button class="cc-plus" title="添加">+</button>
+            <button class="cc-plus" title="新建内容">+</button>
           </div>
-          <div class="cc-row">
+          <div class="cc-row" id="ccSource">
             <div><b>来源</b><span>附加文件或连接应用</span></div>
-            <button class="cc-plus" title="添加">+</button>
+            <button class="cc-plus" title="添加来源">+</button>
+          </div>
+          <div class="canvas-doc" id="canvasDoc" hidden>
+            <textarea id="canvasText" placeholder="在这里写下你的内容…"></textarea>
+            <div class="canvas-doc-bar"><button id="canvasSave">保存</button><button id="canvasClose">关闭</button></div>
           </div>
         </div>
       </aside>
@@ -175,15 +175,16 @@
 
 <!-- 会话长按/右键菜单 -->
 <div class="ctx-menu" id="ctxMenu">
-  <button class="ctx-item" data-act="pin"><span class="ctx-ico">📌</span><span class="ctx-txt">置顶对话</span></button>
-  <button class="ctx-item" data-act="rename"><span class="ctx-ico">✏️</span><span class="ctx-txt">重命名</span></button>
-  <button class="ctx-item danger" data-act="delete"><span class="ctx-ico">🗑️</span><span class="ctx-txt">删除</span></button>
+  <button class="ctx-item" data-act="pin"><span class="ctx-ico" id="pinIco"></span><span class="ctx-txt">置顶对话</span></button>
+  <button class="ctx-item" data-act="rename"><span class="ctx-ico" id="renameIco"></span><span>重命名</span></button>
+  <button class="ctx-item" data-act="export"><span class="ctx-ico" id="exportIco"></span><span>导出对话</span></button>
+  <button class="ctx-item danger" data-act="delete"><span class="ctx-ico" id="deleteIco"></span><span>删除</span></button>
 </div>
 
 <!-- 重命名弹窗 -->
 <div class="modal-mask" id="renameMask">
   <div class="modal">
-    <h3>重命名对话</h3>
+    <h3 id="modalTitle">重命名对话</h3>
     <input type="text" id="renameInput" maxlength="60" placeholder="输入对话名称">
     <div class="modal-btns">
       <button class="mbtn cancel" id="renameCancel">取消</button>
@@ -192,8 +193,25 @@
   </div>
 </div>
 
+<!-- 探索 GPT 面板 -->
+<div class="drawer-mask" id="exploreMask"></div>
+<div class="explore-drawer" id="exploreDrawer">
+  <div class="ed-head"><h3>探索 GPT</h3><button class="icon-btn" id="exploreClose" title="关闭">
+    <svg viewBox="0 0 24 24" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+  </button></div>
+  <p class="ed-sub">选择一个助手，为当前对话切换人设</p>
+  <div class="gpt-grid" id="gptGrid"></div>
+</div>
+
+<!-- 窗口最小化后的浮标 / 关闭后的恢复 -->
+<button class="mini-float hidden" id="miniFloat" title="恢复窗口">✦</button>
+<div class="closed-screen hidden" id="closedScreen">
+  <div><div class="cs-logo">✦</div><h2>窗口已关闭</h2><button class="mbtn ok" id="reopenBtn">重新打开 ChatGPT</button></div>
+</div>
+
 <!-- 通用提示 -->
 <div class="toast" id="toast"></div>
+<input type="file" id="fileInput" hidden multiple>
 
 <script src="assets/app.js"></script>
 </body>
