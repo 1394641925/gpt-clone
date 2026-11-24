@@ -141,6 +141,9 @@ html.dark .logo-mark img{filter:invert(1)}
 .msg.user .m-body{animation:bubbleIn .32s var(--ease)}
 .msg .m-avatar{width:28px;height:28px;flex:0 0 28px;border-radius:50%;background:var(--bg-2);border:1px solid var(--line-2);
   display:flex;align-items:center;justify-content:center;color:var(--text)}
+.msg .m-avatar img{display:block;width:17px;height:17px}
+html:not(.dark) .msg .m-avatar img{filter:none}
+html.dark .msg .m-avatar img{filter:invert(1)}
 .msg .m-body{max-width:78%;line-height:1.75;font-size:14.5px}
 .msg.user .m-body{background:var(--user-bubble);padding:10px 15px;border-radius:18px 18px 4px 18px;white-space:pre-wrap;word-break:break-word}
 .msg.assistant .m-body{padding-top:3px;min-width:0;flex:1}
