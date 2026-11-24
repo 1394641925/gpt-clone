@@ -352,6 +352,22 @@
     s = s.replace(/[\?？。，,!！、]/g, ' ').replace(/\s+/g, ' ').trim();
     return s || String(q || '').trim();
   }
+  // 计算查询与结果标题的相关度（中文双字 + 英文词 + 数字），用于剔除完全无关的来源
+  function relevance(query, title) {
+    var keys = [];
+    var en = String(query).toLowerCase().match(/[a-z]{2,}/g) || [];
+    var num = String(query).match(/[0-9]{2,}/g) || [];
+    keys = keys.concat(en, num);
+    var zh = String(query).replace(/[0-9a-zA-Z\s]/g, '');
+    for (var i = 0; i + 2 <= zh.length; i++) {
+      var bg = zh.slice(i, i + 2);
+      if (/[\u4e00-\u9fa5]{2}/.test(bg) && keys.indexOf(bg) < 0) keys.push(bg);
+    }
+    var t = String(title || '').toLowerCase();
+    var hit = 0;
+    keys.forEach(function (k) { if (t.indexOf(k.toLowerCase()) >= 0) hit++; });
+    return hit;
+  }
   function webSearch(query) {
     var q = rewriteQuery(query);
     var url = SEARCH_URL + '?q=' + encodeURIComponent(q) + '&t=' + Date.now();
@@ -359,7 +375,13 @@
     var timer = setTimeout(function () { ctrl.abort(); }, 14000);
     return fetch(url, { signal: ctrl.signal })
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
-      .then(function (j) { clearTimeout(timer); return (j && j.results) || []; })
+      .then(function (j) {
+        clearTimeout(timer);
+        var list = (j && j.results) || [];
+        // 剔除与问题毫无重合的来源，避免 AI 硬引用无关网页答非所问
+        // 若全部无关就返回空，让回答退回 AI 常识并说明"未找到可靠联网来源"
+        return list.filter(function (s) { return relevance(q, s.title) > 0; });
+      })
       .catch(function () { clearTimeout(timer); return []; });
   }
 
