@@ -407,13 +407,13 @@
       clearTimeout(watchdog);
       setSending(false); renderChats($('#searchInput') ? $('#searchInput').value : '');
     }
-    // 看门狗：无论 API 是否返回，30 秒后强制给出结果并解锁，杜绝"一直不出回答"
+    // 看门狗：无论 API 是否返回，45 秒后强制给出结果并解锁，杜绝"一直不出回答"
     var watchdog = setTimeout(function () {
       if (done || myGen !== gen) return;
       if (!aMsg.content) { aMsg.content = localReply(text); aMsg.fallback = true; save(); }
       showAnswer();
       finish(myGen);
-    }, 30000);
+    }, 45000);
 
     function phaseSearch() {
       if (!useSearch) return Promise.resolve();
@@ -467,10 +467,10 @@
         '② 把资料里的要点用自己的话整合、解释清楚，不要只复述标题；多条资料可以综合起来回答。\n' +
         '③ 资料里确实没有的关键信息，就说"这次搜索的资料里没有找到"，再基于你已有的常识补充，但要明确区分哪些来自搜索、哪些是你的常识。\n' +
         '④ 不要编造资料中不存在的具体数字、日期、人名或事件；不确定的内容标明不确定。即使资料有限，也要给出尽量有帮助的回答，不要只说"没找到"。\n\n' +
-        results.map(function (s, i) { return '[' + (i + 1) + '] ' + s.title + '\n' + s.url + '\n' + (s.date ? '时间：' + shortDate(s.date) + '\n' : '') + s.snippet; }).join('\n\n');
+        results.slice(0, 12).map(function (s, i) { return '[' + (i + 1) + '] ' + s.title + '\n' + s.url + '\n' + (s.date ? '时间：' + shortDate(s.date) + '\n' : '') + s.snippet; }).join('\n\n');
       if (useThink && thinkText) extra += '\n\n你在内部已做过如下分析（不要提及这段分析本身，直接给结论）：\n' + thinkText;
       var msgs = buildMessages(c, extra || null);
-      return callAPI(msgs, 20000).then(function (answer) {
+      return callAPI(msgs, 30000).then(function (answer) {
         if (myGen !== gen || done) return;
         answer = answer || '抱歉，这次没有得到结果，请再试一次。';
         // 回答过于保守时，引导用户查看来源（不编造内容，只做提示）
