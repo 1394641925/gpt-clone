@@ -23,7 +23,6 @@
         <button class="menu-item" data-menu="view">视图</button>
         <button class="menu-item" data-menu="help">帮助</button>
       </nav>
-      <div class="dropdown" id="menuDropdown"></div>
     </div>
     <div class="title-center">ChatGPT</div>
     <div class="tb-right">
@@ -211,6 +210,9 @@
 <div class="closed-screen hidden" id="closedScreen">
   <div><div class="cs-logo">✦</div><h2>窗口已关闭</h2><button class="mbtn ok" id="reopenBtn">重新打开 ChatGPT</button></div>
 </div>
+
+<!-- 通用下拉菜单（挂在 body 下：移动端隐藏标题栏时仍可用；fixed 定位不受父级影响） -->
+<div class="dropdown" id="menuDropdown"></div>
 
 <!-- 通用提示 -->
 <div class="toast" id="toast"></div>
