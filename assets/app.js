@@ -79,7 +79,7 @@
 
   /* ============ 轻量 Markdown ============ */
   function md(text) {
-    var s = esc(text);
+    var s = esc(String(text == null ? '' : text).trim());
     s = s.replace(/```([\w-]*)\n?([\s\S]*?)```/g, function (m, lang, code) { return '<pre><code>' + code.replace(/^\n|\n$/g, '') + '</code></pre>'; });
     s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
     s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
@@ -135,9 +135,16 @@
 
   /* ============ 消息渲染（每条消息带 mid，精确定位） ============ */
   function userBubble(m) {
-    var att = (m.attachments && m.attachments.length)
-      ? '<div class="user-att">' + m.attachments.map(function (a) { return '<span>' + ICON.export + esc(a.name) + '</span>'; }).join('') + '</div>' : '';
-    return '<div class="msg user" data-mid="' + m.mid + '"><div class="m-body">' + att + esc(m.content) + '</div></div>';
+    var att = '';
+    if (m.attachments && m.attachments.length) {
+      var chips = m.attachments.map(function (a) {
+        if (a.kind === 'image' && a.dataUrl) return '<span class="att-img"><img src="' + a.dataUrl + '" alt="' + esc(a.name) + '" title="' + esc(a.name) + '"></span>';
+        var tag = a.kind === 'text' ? '文本' : (a.kind === 'image' ? '图片' : '文件');
+        return '<span class="att-file">' + ICON.export + '<b>' + esc(a.name) + '</b><em>' + tag + '</em></span>';
+      }).join('');
+      att = '<div class="user-att">' + chips + '</div>';
+    }
+    return '<div class="msg user" data-mid="' + m.mid + '"><div class="m-body">' + att + (m.content ? esc(m.content) : '') + '</div></div>';
   }
   function assistantBubble(m) {
     var parts = [];
@@ -187,7 +194,7 @@
       [ICON.chart, '分析一个数据问题', '帮我分析数据并给出建议'],
       [ICON.globe, '解释一个复杂概念', '用简单的语言解释量子计算']
     ];
-    return '<div class="logo-mark"><svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M21.55 9.18a5.9 5.9 0 0 0-.5-4.84 6 6 0 0 0-6.5-2.88A5.9 5.9 0 0 0 10.4.3a6 6 0 0 0-5.64 3.84 5.9 5.9 0 0 0-3.94 3.06 6 6 0 0 0 .74 6.3 5.9 5.9 0 0 0 .5 4.84 6 6 0 0 0 6.5 2.88 5.9 5.9 0 0 0 4.15 1.16 6 6 0 0 0 5.64-3.84 5.9 5.9 0 0 0 3.94-3.06 6 6 0 0 0-.74-6.3z"/></svg></div>' +
+    return '<div class="logo-mark"><img src="assets/openai-logo.svg" alt="OpenAI" width="30" height="30"></div>' +
       '<h2>有什么可以帮忙的？</h2><p class="empty-sub">开始一段新的对话吧</p><div class="suggestions">' +
       sugs.map(function (s) { return '<button class="sug-card" data-q="' + esc(s[2]) + '"><span class="sug-ico">' + s[0] + '</span>' + s[1] + '</button>'; }).join('') + '</div>';
   }
@@ -263,7 +270,8 @@
     return String(text || '')
       .replace(/智谱清言|智谱AI|智谱|清华系|ChatGLM|GLM-?4|GLM|清言/g, 'ChatGPT')
       .replace(/我是ChatGPT(，模型)?[，,]/g, '我是 ChatGPT，')
-      .replace(/由腾讯开发/g, '由 OpenAI 开发');
+      .replace(/由腾讯开发/g, '由 OpenAI 开发')
+      .trim(); // 去掉模型常返回的前导/结尾换行，避免回答和思考前多出空行
   }
   // 身份锚点：无论底层模型是什么，对外必须是 ChatGPT。放在 system 最前面反复强调。
   var IDENTITY = '【最高优先级身份设定】你的名字是 ChatGPT，是由 OpenAI 开发的人工智能助手。' +
@@ -295,7 +303,14 @@
     c.messages.slice(-10).forEach(function (m) {
       if (m.role === 'user') {
         var content = m.content;
-        if (m.attachments && m.attachments.length) content += '\n\n[用户附加的文件内容：\n' + m.attachments.map(function (a) { return '《' + a.name + '》\n' + (a.text || ''); }).join('\n\n') + '\n]';
+        if (m.attachments && m.attachments.length) {
+          var attTxt = m.attachments.map(function (a) {
+            if (a.kind === 'text') return '《' + a.name + '》的完整内容：\n' + (a.text || '');
+            if (a.kind === 'image') return '《' + a.name + '》（图片附件：当前模型不支持识别图片内容，用户只上传了图片，未附带文字说明）';
+            return '《' + a.name + '》：' + (a.text || '文件附件');
+          }).join('\n\n');
+          content += '\n\n[用户附加的文件：\n' + attTxt + '\n]\n请结合以上附件内容回答用户的问题。';
+        }
         msgs.push({ role: 'user', content: content });
       } else if (m.role === 'assistant' && m.content) msgs.push({ role: 'assistant', content: m.content });
     });
@@ -419,9 +434,10 @@
     }
     function phaseThink() {
       if (!useThink) return Promise.resolve();
-      var THINK_STYLE = '你的思考要像 ChatGPT 的推理过程：先明确问题到底在问什么、用户真正想要什么；再拆解关键概念与已知条件；' +
-        '接着有条理地推导，考虑 2-3 种可能的角度或方案；过程中主动自我质疑、排除不靠谱的方向；最后收敛到最稳妥的结论。' +
-        '思维要显得清晰、审慎、层层递进，像在心里一步步把问题想明白。用中文，150-280 字，自然叙述，不要写"第一步/第二步"这种生硬标题，也不要输出最终格式化答案。';
+      var THINK_STYLE = '你在模拟真正的心里推理，不是写给我看的说明文。把思考拆成 3-5 个短步骤，每步一句话，单独占一行，像脑海里真实冒出的念头。' +
+        '遵循这个自然节奏：① 先确认用户到底想要什么；② 拆解关键点和已知条件；③ 尝试一种思路并往前推；④ 停下来自我质疑"这样对吗、有没有漏洞"，必要时换角度；⑤ 收敛到最稳妥的方向。' +
+        '用第一人称的口吻，可以出现"嗯…""这里要注意""等一下""换个角度看""好，思路清楚了"这类真实的犹豫与转折。' +
+        '每行 15-45 字，总共 4-7 行，只用换行分段，不要编号、不要项目符号、不要加粗、不要写成一段话，也不要给出最终格式化答案。';
       var msgs = [{ role: 'system', content: IDENTITY + '你是 ChatGPT 的内部深度推理模块。' + THINK_STYLE }];
       c.messages.slice(-8).forEach(function (m) {
         if (!m.content || m.mid === midVal) return;
@@ -430,7 +446,7 @@
       if (!msgs.some(function (m) { return m.role === 'user'; })) msgs.push({ role: 'user', content: text });
       return callAPI(msgs, 18000).then(function (r) {
         if (myGen !== gen) return;
-        thinkText = r || '分析问题要点，梳理已知信息后给出稳妥回答。';
+        thinkText = String(r || '').trim() || '分析问题要点，梳理已知信息后给出稳妥回答。';
         aMsg.thinking = thinkText; aMsg.thinkSecs = Math.max(1, Math.round((now() - t0) / 1000)); save();
         var label = part(midVal, '[data-role="think-label"]');
         if (label) label.textContent = '已深度思考（用时 ' + aMsg.thinkSecs + ' 秒）';
@@ -446,11 +462,12 @@
     function phaseAnswer() {
       if (myGen !== gen || done) return Promise.resolve();
       var extra = '';
-      if (results.length) extra = '【联网资料 · 严格遵守】下面是刚刚搜索到的资料。回答时必须遵守：\n' +
-        '① 只依据这些资料回答，用 [1] [2] 标注来源；资料里没有的信息，明确说"搜索结果中没有提到"，绝不能自己编造。\n' +
-        '② 禁止编造任何具体数字、日期、人名、事件、数据或引用；不确定的内容一律不要写。\n' +
-        '③ 如果资料不足以回答，就如实说明并给出你能确认的部分，不要拼凑出看似完整的答案。\n\n' +
-        results.map(function (s, i) { return '[' + (i + 1) + '] ' + s.title + '\n' + s.url + '\n' + s.snippet; }).join('\n');
+      if (results.length) extra = '【实时联网资料】下面是刚刚为你搜索到的网页资料（标题、网址、摘要）。请充分利用它们回答问题：\n' +
+        '① 优先依据这些资料组织回答，在对应的事实后用 [1] [2] 标注来源编号，并在结尾用一句话简短说明"以上信息来自本次联网搜索"。\n' +
+        '② 把资料里的要点用自己的话整合、解释清楚，不要只复述标题；多条资料可以综合起来回答。\n' +
+        '③ 资料里确实没有的关键信息，就说"这次搜索的资料里没有找到"，再基于你已有的常识补充，但要明确区分哪些来自搜索、哪些是你的常识。\n' +
+        '④ 不要编造资料中不存在的具体数字、日期、人名或事件；不确定的内容标明不确定。即使资料有限，也要给出尽量有帮助的回答，不要只说"没找到"。\n\n' +
+        results.map(function (s, i) { return '[' + (i + 1) + '] ' + s.title + '\n' + s.url + '\n' + (s.date ? '时间：' + shortDate(s.date) + '\n' : '') + s.snippet; }).join('\n\n');
       if (useThink && thinkText) extra += '\n\n你在内部已做过如下分析（不要提及这段分析本身，直接给结论）：\n' + thinkText;
       var msgs = buildMessages(c, extra || null);
       return callAPI(msgs, 20000).then(function (answer) {
@@ -515,17 +532,42 @@
     row.innerHTML = pendingAttachments.map(function (a, i) { return '<span class="att-chip">' + ICON.export + esc(a.name) + '<button data-rmatt="' + i + '" title="移除">×</button></span>'; }).join('');
     $$('[data-rmatt]', row).forEach(function (b) { b.addEventListener('click', function () { pendingAttachments.splice(+b.getAttribute('data-rmatt'), 1); renderAttachments(); autoGrow(); }); });
   }
-  function handleFiles(files) {
-    Array.prototype.slice.call(files).slice(0, 5).forEach(function (f) {
-      var item = { name: f.name, text: '' };
-      pendingAttachments.push(item);
-      if (f.size < 200000 && /\.(txt|md|js|py|json|csv|html|css|log)$/i.test(f.name)) {
-        var reader = new FileReader();
-        reader.onload = function () { item.text = String(reader.result).slice(0, 4000); };
-        reader.readAsText(f);
-      } else item.text = '（二进制文件：' + f.name + '，' + Math.round(f.size / 1024) + ' KB）';
+  // 读取为 DataURL（用于图片缩略图）
+  function readAsDataURL(f) {
+    return new Promise(function (res) {
+      var r = new FileReader();
+      r.onload = function () { res(String(r.result || '')); };
+      r.onerror = function () { res(''); };
+      r.readAsDataURL(f);
     });
-    renderAttachments(); autoGrow();
+  }
+  function handleFiles(files) {
+    var list = Array.prototype.slice.call(files).slice(0, 5);
+    Promise.all(list.map(function (f) {
+      var lower = f.name.toLowerCase();
+      var item = { name: f.name, size: f.size, mime: f.type, kind: 'file', text: '', dataUrl: '' };
+      // 纯文本类：真正读取全文，送进 API 上下文
+      if (/\.(txt|md|markdown|js|jsx|ts|tsx|py|json|csv|html|htm|css|log|xml|yaml|yml|sql|sh|java|c|cpp|go|rs|ini|conf|env)$/i.test(lower) || /^text\//i.test(f.type)) {
+        return new Promise(function (res) {
+          var r = new FileReader();
+          r.onload = function () { item.kind = 'text'; item.text = String(r.result || '').slice(0, 20000); res(item); };
+          r.onerror = function () { item.kind = 'text'; item.text = '（读取失败）'; res(item); };
+          r.readAsText(f);
+        });
+      }
+      // 图片：当前模型不支持视觉，但保留本地缩略图，让用户看到文件确实已附加
+      if (/^image\//i.test(f.type)) {
+        item.kind = 'image';
+        return readAsDataURL(f).then(function (d) { item.dataUrl = d; return item; });
+      }
+      // 其它二进制（PDF/Office/压缩包等）：诚实说明无法解析内容
+      item.kind = 'binary';
+      item.text = '（' + (f.name.split('.').pop() || '文件').toUpperCase() + ' 文件，' + Math.round(f.size / 1024) + ' KB；当前模型无法读取该格式的内容）';
+      return Promise.resolve(item);
+    })).then(function (items) {
+      items.forEach(function (it) { pendingAttachments.push(it); });
+      renderAttachments(); autoGrow();
+    });
   }
 
   /* ============ 下拉菜单 ============ */
