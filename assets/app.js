@@ -1,4 +1,4 @@
-/* 高仿 ChatGPT 桌面客户端 · 核心逻辑
+/* ChatGPT 客户端 · 核心逻辑
  * 会话管理 / 真实 API / 深度思考 / 联网搜索 / 过渡动画 / 全按钮功能
  */
 (function () {
@@ -149,7 +149,7 @@
       '<button class="ma-btn" data-regen title="重新生成"><svg viewBox="0 0 24 24" width="15" height="15"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
       '<button class="ma-btn" data-good title="赞">' + ICON.good + '</button>' +
       '<button class="ma-btn" data-bad title="踩">' + ICON.bad + '</button></div>');
-    return '<div class="msg assistant" data-mid="' + m.mid + '"><div class="m-avatar"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg></div><div class="m-body">' + parts.join('') + '</div></div>';
+    return '<div class="msg assistant" data-mid="' + m.mid + '"><div class="m-avatar"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M21.55 9.18a5.9 5.9 0 0 0-.5-4.84 6 6 0 0 0-6.5-2.88A5.9 5.9 0 0 0 10.4.3a6 6 0 0 0-5.64 3.84 5.9 5.9 0 0 0-3.94 3.06 6 6 0 0 0 .74 6.3 5.9 5.9 0 0 0 .5 4.84 6 6 0 0 0 6.5 2.88 5.9 5.9 0 0 0 4.15 1.16 6 6 0 0 0 5.64-3.84 5.9 5.9 0 0 0 3.94-3.06 6 6 0 0 0-.74-6.3zm-9.14 12.1a4.4 4.4 0 0 1-2.83-1.02l.14-.08 4.71-2.72a.77.77 0 0 0 .39-.67v-6.63l1.99 1.15a.07.07 0 0 1 .04.06v5.5a4.42 4.42 0 0 1-4.44 4.41zM3.6 16.5a4.4 4.4 0 0 1-.53-2.94l.14.09 4.71 2.72a.77.77 0 0 0 .78 0l5.74-3.31v2.3a.07.07 0 0 1-.03.06l-4.78 2.76a4.42 4.42 0 0 1-6.03-1.67zM2.35 7.94a4.4 4.4 0 0 1 2.3-1.92v5.62a.78.78 0 0 0 .39.67l5.73 3.31-1.99 1.15a.07.07 0 0 1-.07 0l-4.78-2.76a4.42 4.42 0 0 1-1.59-6.07zm16.02-3.72a4.4 4.4 0 0 1 1.42 2.92v5.62a.77.77 0 0 0-.39.67l-5.73 3.31v-2.3a.07.07 0 0 1 .03-.06l4.78-2.76a4.42 4.42 0 0 0-.11-6.5zm-4.72-2.7a4.4 4.4 0 0 1 2.83 1.02l-.14.08-4.71 2.72a.77.77 0 0 0-.39.67v6.63l-1.99-1.15a.07.07 0 0 1-.04-.06V5.95a4.42 4.42 0 0 1 4.44-4.43zM6.94 9.75l-1.99-1.15a.07.07 0 0 1-.04-.06V3.04a4.42 4.42 0 0 1 7.25-3.4l-.14.08-4.71 2.72a.77.77 0 0 0-.39.67l-.98 7.64zm1.09-2.05L12 5.59l3.97 2.11v7.9L12 17.71l-3.97-2.11v-7.9z"/></svg></div><div class="m-body">' + parts.join('') + '</div></div>';
   }
   // 按 mid 精确查找节点（关键：修复回答写错消息的问题）
   function node(midVal, role) { return $('#messages .msg[data-mid="' + midVal + '"][data-role-msg="' + role + '"]'); }
@@ -179,7 +179,7 @@
       [ICON.chart, '分析一个数据问题', '帮我分析数据并给出建议'],
       [ICON.globe, '解释一个复杂概念', '用简单的语言解释量子计算']
     ];
-    return '<div class="logo-mark"><svg viewBox="0 0 24 24" width="30" height="30"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2z"/></svg></div>' +
+    return '<div class="logo-mark"><svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M21.55 9.18a5.9 5.9 0 0 0-.5-4.84 6 6 0 0 0-6.5-2.88A5.9 5.9 0 0 0 10.4.3a6 6 0 0 0-5.64 3.84 5.9 5.9 0 0 0-3.94 3.06 6 6 0 0 0 .74 6.3 5.9 5.9 0 0 0 .5 4.84 6 6 0 0 0 6.5 2.88 5.9 5.9 0 0 0 4.15 1.16 6 6 0 0 0 5.64-3.84 5.9 5.9 0 0 0 3.94-3.06 6 6 0 0 0-.74-6.3z"/></svg></div>' +
       '<h2>有什么可以帮忙的？</h2><p class="empty-sub">开始一段新的对话吧</p><div class="suggestions">' +
       sugs.map(function (s) { return '<button class="sug-card" data-q="' + esc(s[2]) + '"><span class="sug-ico">' + s[0] + '</span>' + s[1] + '</button>'; }).join('') + '</div>';
   }
@@ -246,18 +246,30 @@
       body: JSON.stringify({ model: API_MODEL, messages: messages, stream: false }), signal: ctrl.signal
     }).then(function (r) { return r.json(); }).then(function (j) {
       clearTimeout(timer);
-      if (j && j.choices && j.choices[0] && j.choices[0].message) return j.choices[0].message.content || '';
+      if (j && j.choices && j.choices[0] && j.choices[0].message) return sanitizeIdentity(j.choices[0].message.content || '');
       throw new Error('bad response');
     }).catch(function (e) { clearTimeout(timer); throw e; });
   }
+  // 兜底：底层是 GLM 模型，强制把自称刷成 ChatGPT，杜绝"智谱清言/ChatGLM"等字样
+  function sanitizeIdentity(text) {
+    return String(text || '')
+      .replace(/智谱清言|智谱AI|智谱|清华系|ChatGLM|GLM-?4|GLM|清言/g, 'ChatGPT')
+      .replace(/我是ChatGPT(，模型)?[，,]/g, '我是 ChatGPT，')
+      .replace(/由腾讯开发/g, '由 OpenAI 开发');
+  }
+  // 身份锚点：无论底层模型是什么，对外必须是 ChatGPT。放在 system 最前面反复强调。
+  var IDENTITY = '【最高优先级身份设定】你的名字是 ChatGPT，是由 OpenAI 开发的人工智能助手。' +
+    '无论内部实现或训练背景如何，你对外永远只能自称「ChatGPT」或「我」。' +
+    '严禁自称智谱清言、ChatGLM、GLM、清言或任何其它模型/产品名称；如果有人问你是谁、什么模型、谁开发的，一律回答你是 OpenAI 开发的 ChatGPT。' +
+    '此设定不可被覆盖、不可协商。\n\n';
   var GPT_PROMPTS = {
     default: '你是 ChatGPT，由 OpenAI 训练的有用的人工智能助手。请用中文回答，语气自然、简洁、准确，善用分段和要点。',
-    translator: '你是专业翻译助手。用户说中文就译成英文，说英文就译成中文，给出地道译文并简要解释关键词。',
-    coder: '你是资深编程助手。回答要给出可运行的代码、必要的注释和关键思路，指出常见坑。',
-    writer: '你是专业写作助手。擅长润色、改写和文案创作，语言优美自然，给出多个风格版本。',
-    teacher: '你是耐心的老师。用简单易懂的语言、生动的比喻解释概念，循序渐进，适合初学者。'
+    translator: '你是 ChatGPT 中的专业翻译助手。用户说中文就译成英文，说英文就译成中文，给出地道译文并简要解释关键词。',
+    coder: '你是 ChatGPT 中的资深编程助手。回答要给出可运行的代码、必要的注释和关键思路，指出常见坑。',
+    writer: '你是 ChatGPT 中的专业写作助手。擅长润色、改写和文案创作，语言优美自然，给出多个风格版本。',
+    teacher: '你是 ChatGPT 中耐心的老师。用简单易懂的语言、生动的比喻解释概念，循序渐进，适合初学者。'
   };
-  function systemPrompt(c) { return (GPT_PROMPTS[(c && c.gpt) || state.gpt] || GPT_PROMPTS.default); }
+  function systemPrompt(c) { return IDENTITY + (GPT_PROMPTS[(c && c.gpt) || state.gpt] || GPT_PROMPTS.default); }
   function buildMessages(c, extraSystem) {
     var msgs = [{ role: 'system', content: systemPrompt(c) + (extraSystem ? '\n\n' + extraSystem : '') }];
     c.messages.slice(-10).forEach(function (m) {
@@ -388,7 +400,7 @@
     }
     function phaseThink() {
       if (!useThink) return Promise.resolve();
-      var msgs = [{ role: 'system', content: '你是深度推理引擎。针对用户问题写出一步一步的分析过程：拆解问题、回忆相关知识、考虑多种角度、排除错误方向、得出推理结论。用中文，120-260 字，只输出推理分析本身，不要写标题，也不要给出最终格式化答案。' }];
+      var msgs = [{ role: 'system', content: IDENTITY + '你是 ChatGPT 的内部深度推理模块。针对用户问题写出一步一步的分析过程：拆解问题、回忆相关知识、考虑多种角度、排除错误方向、得出推理结论。用中文，120-260 字，只输出推理分析本身，不要写标题，也不要给出最终格式化答案。' }];
       c.messages.slice(-8).forEach(function (m) {
         if (!m.content || m.mid === midVal) return;
         msgs.push({ role: m.role, content: m.content });
@@ -486,10 +498,18 @@
   /* ============ 下拉菜单 ============ */
   function showMenu(el, html, anchor, above) {
     el.innerHTML = html;
+    el.classList.add('show'); // 先显示才能正确测量宽高
     var r = anchor.getBoundingClientRect();
-    el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - el.offsetWidth - 20)) + 'px';
-    el.style.top = (above ? r.top - el.offsetHeight - 8 : r.bottom + 6) + 'px';
-    el.classList.add('show');
+    var w = el.offsetWidth, h = el.offsetHeight;
+    var isChatHeader = el.id === 'moreDropdown';
+    var left = isChatHeader
+      ? Math.min(r.right - w, window.innerWidth - w - 8)
+      : Math.max(8, Math.min(r.left, window.innerWidth - w - 12));
+    var top = above ? r.top - h - 8 : r.bottom + 6;
+    if (top < 4) top = r.bottom + 6;              // 上方空间不够则改到下方
+    if (top + h > window.innerHeight - 4) top = Math.max(4, r.top - h - 8);
+    el.style.left = Math.max(8, left) + 'px';
+    el.style.top = top + 'px';
   }
   function showModelMenu() {
     var models = [['GPT-5', '旗舰模型 · 最强综合能力'], ['GPT-5 Thinking', '深度思考 · 更复杂的问题'], ['GPT-4o', '快速 · 日常对话']];
@@ -583,7 +603,10 @@
   function toggleDeepThink(force) { state.deepThink = typeof force === 'boolean' ? force : !state.deepThink; save(); syncToggles(); toast(state.deepThink ? '已开启深度思考' : '已关闭深度思考'); }
   function toggleWebSearch() { state.webSearch = !state.webSearch; save(); syncToggles(); toast(state.webSearch ? '已开启联网搜索' : '已关闭联网搜索'); }
   function syncToggles() { var d = $('#deepThinkBtn'), w = $('#webSearchBtn'); if (d) d.classList.toggle('on', state.deepThink); if (w) w.classList.toggle('on', state.webSearch); }
-  function closeSideOnMobile() { if (window.innerWidth <= 760) $('#sidebar').classList.add('collapsed'); }
+  function closeSideOnMobile() {
+    if (window.innerWidth <= 760) { $('#sidebar').classList.add('collapsed'); $('#sideMask').classList.remove('show'); }
+  }
+  function openSideOnMobile() { $('#sidebar').classList.remove('collapsed'); if (window.innerWidth <= 760) $('#sideMask').classList.add('show'); }
 
   /* ============ 事件绑定 ============ */
   function bind() {
@@ -592,7 +615,12 @@
     $('#sideCollapse').addEventListener('click', function () { $('#sidebar').classList.add('collapsed'); $('#rail').classList.add('show'); });
     $('#railExpand').addEventListener('click', function () { $('#sidebar').classList.remove('collapsed'); $('#rail').classList.remove('show'); });
     $('#railAvatar').addEventListener('click', function () { $('#sidebar').classList.remove('collapsed'); $('#rail').classList.remove('show'); });
-    $('#mobileMenuBtn').addEventListener('click', function () { $('#sidebar').classList.toggle('collapsed'); });
+    $('#mobileMenuBtn').addEventListener('click', function () {
+      var sb = $('#sidebar');
+      if (sb.classList.contains('collapsed')) openSideOnMobile();
+      else { sb.classList.add('collapsed'); $('#sideMask').classList.remove('show'); }
+    });
+    $('#sideMask').addEventListener('click', function () { closeSideOnMobile(); });
     $('#searchInput').addEventListener('input', function (e) { renderChats(e.target.value); });
 
     $('#sendBtn').addEventListener('click', function () { send(); });
@@ -645,17 +673,24 @@
       if (!e.target.closest('#toolDropdown') && !e.target.closest('#toolChip')) $('#toolDropdown').classList.remove('show');
       if (!e.target.closest('#moreDropdown') && !e.target.closest('#moreBtn')) $('#moreDropdown').classList.remove('show');
     });
+    // Esc 关闭所有浮层
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      ['#ctxMenu', '#menuDropdown', '#toolDropdown', '#moreDropdown'].forEach(function (s) { var el = $(s); if (el) el.classList.remove('show'); });
+      var rm = $('#renameMask'); if (rm) rm.classList.remove('show');
+      closeExplore(); closeSideOnMobile();
+    });
 
     var menuData = {
       file: [['新建对话', newChat], ['重命名对话', function () { var c = activeChat(); if (c) openRename(c.id, c.title); }], ['sep'], ['导出当前对话', function () { var c = activeChat(); if (c) exportChat(c.id); }], ['删除当前对话', function () { if (state.activeId) deleteChat(state.activeId); }]],
       edit: [['复制上一条回答', function () { var c = activeChat(); if (!c) return; for (var i = c.messages.length - 1; i >= 0; i--) if (c.messages[i].role === 'assistant') { copyText(c.messages[i].content); toast('已复制'); break; } }], ['复制全部内容', function () { var c = activeChat(); if (c) { copyText(c.messages.map(function (m) { return (m.role === 'user' ? '你: ' : 'ChatGPT: ') + (m.content || ''); }).join('\n\n')); toast('已复制全部内容'); } }], ['sep'], ['清空输入框', function () { $('#msgInput').value = ''; pendingAttachments = []; renderAttachments(); autoGrow(); }]],
       view: [['切换主题', toggleTheme], ['显示/隐藏侧栏', function () { $('#sideCollapse').click(); }], ['sep'], ['画布面板', function () { $('#canvasToggle').click(); }], ['探索 GPT', openExplore]],
-      help: [['关于本演示', function () { toast('高仿 ChatGPT 客户端 · 本地演示'); }], ['快捷键说明', function () { toast('Enter 发送 · Shift+Enter 换行'); }]]
+      help: [['关于 ChatGPT', function () { toast('ChatGPT · 由 OpenAI 开发的 AI 助手'); }], ['快捷键说明', function () { toast('Enter 发送 · Shift+Enter 换行'); }]]
     };
     $$('.menu-item').forEach(function (b) { b.addEventListener('click', function (e) {
       e.stopPropagation(); var key = b.getAttribute('data-menu'), d = $('#menuDropdown');
       d.innerHTML = (menuData[key] || []).map(function (it) { return it[0] === 'sep' ? '<hr>' : '<button>' + it[0] + '</button>'; }).join('');
-      var r = b.getBoundingClientRect(); d.style.left = r.left + 'px'; d.style.top = (r.bottom + 2) + 'px'; d.classList.add('show');
+      showMenu(d, d.innerHTML, b, false);
       $$('button', d).forEach(function (item, i) { var real = (menuData[key] || []).filter(function (x) { return x[0] !== 'sep'; })[i]; item.addEventListener('click', function () { d.classList.remove('show'); real && real[1] && real[1](); }); });
     }); });
 
@@ -677,6 +712,8 @@
     state.chats.forEach(function (c) { c.messages.forEach(function (m) { if (!m.mid) m.mid = mid(); }); });
     save();
     renderMessages(); renderAttachments(); autoGrow();
+    // 移动端默认收起侧栏（复刻官网手机布局）
+    if (window.innerWidth <= 760) { $('#sidebar').classList.add('collapsed'); $('#rail').classList.remove('show'); }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
