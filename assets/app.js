@@ -87,14 +87,15 @@
     }
     return md(t);
   }
+  function searchStepInner(s) {
+    var tail = s.count != null ? (' → 找到 ' + s.count + ' 条结果') : ' → 搜索中…';
+    return ICON.globe + '<span>我搜索了「' + esc(s.query) + '」' + tail + '</span>';
+  }
   // 分层思考渲染：把"思考段"和"搜索动作"按顺序拼成有层次的过程
   function stepsHtml(steps) {
     if (!steps || !steps.length) return '';
     return steps.map(function (s) {
-      if (s.t === 'search') {
-        var tail = s.count != null ? (' → 找到 ' + s.count + ' 条结果') : ' → 搜索中…';
-        return '<div class="ts-step ts-search">' + ICON.globe + '<span>我搜索了「' + esc(s.query) + '」' + tail + '</span></div>';
-      }
+      if (s.t === 'search') return '<div class="ts-step ts-search">' + searchStepInner(s) + '</div>';
       return '<div class="ts-step ts-think">' + thinkMd(s.text) + '</div>';
     }).join('');
   }
@@ -441,11 +442,14 @@
   function typeText(el, text, myGen, done, renderer) {
     if (!el) { if (done) done(); return; }
     var render = renderer || md;
-    var i = 0, step = Math.max(2, Math.ceil(text.length / 70)), speed = 12;
+    text = String(text == null ? '' : text);
+    var i = 0;
+    // 真·逐字：一次一个字符；速度按长度自适应，短句看得清、长文不拖沓
+    var speed = text.length <= 300 ? 16 : (text.length <= 1000 ? 9 : 5);
     el.classList.add('typing');
     function tick() {
       if (myGen !== gen || !el.isConnected) { el.classList.remove('typing'); return; } // 世代失效：静默停止，绝不触发完成
-      i += step;
+      i += 1;
       if (i >= text.length) {
         el.innerHTML = render(text); el.classList.remove('typing'); scrollBottom();
         if (done) done(); return;
@@ -487,11 +491,14 @@
     var done = false;
 
     // 强制渲染回答内容到正确的消息节点（节点丢失则重建消息区再取，绝不静默吞掉）
+    var answerTyped = false; // 防止 showAnswer 被多处调用导致重复打字
     function showAnswer() {
       var node = part(midVal, '[data-role="content"]');
       if (!node) { renderMessages(); node = part(midVal, '[data-role="content"]'); }
-      if (node) {
-        node.classList.remove('typing');
+      if (node && !answerTyped) {
+        answerTyped = true;
+        typeText(node, aMsg.content || localReply(text), myGen);
+      } else if (node) {
         node.innerHTML = md(aMsg.content || localReply(text));
       }
       scrollBottom();
@@ -520,17 +527,35 @@
 
     // 追加一步思考/搜索到分层面板，并即时渲染
     function appendStep(step) {
+      var idx = aMsg.steps.length;
       aMsg.steps.push(step);
       if (step.t === 'think') thinkText += (thinkText ? '\n' : '') + step.text;
       save();
       var body = part(midVal, '[data-role="think-body"]');
-      if (body) body.innerHTML = stepsHtml(aMsg.steps);
+      if (!body) return;
+      var wait = body.querySelector('.think-wait'); if (wait) wait.remove();
+      if (step.t === 'think') {
+        // 思考段：新建独立节点，逐字浮现（数据已落盘，打字只是视觉）
+        var node = document.createElement('div');
+        node.className = 'ts-step ts-think'; node.setAttribute('data-si', idx);
+        body.appendChild(node);
+        typeText(node, step.text, myGen, null, thinkMd);
+      } else {
+        // 搜索段：整段插入，带动画
+        var wrap = document.createElement('div');
+        wrap.innerHTML = stepsHtml([step]);
+        var sn = wrap.firstChild; if (sn) sn.setAttribute('data-si', idx);
+        body.appendChild(sn);
+      }
       scrollBottom();
     }
     function updateStepSearch(index, count) {
       if (aMsg.steps[index]) { aMsg.steps[index].count = count; save(); }
       var body = part(midVal, '[data-role="think-body"]');
-      if (body) body.innerHTML = stepsHtml(aMsg.steps);
+      if (body) {
+        var node = body.querySelector('.ts-step[data-si="' + index + '"]');
+        if (node) node.innerHTML = searchStepInner(aMsg.steps[index]);
+      }
     }
     function setThinkLabel(doneThinking) {
       aMsg.thinkSecs = Math.max(1, Math.round((now() - t0) / 1000));
