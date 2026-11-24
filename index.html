@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="一个高仿 ChatGPT 桌面客户端界面的本地演示">
+<meta name="description" content="ChatGPT — 与你对话、创作和解决问题的 AI 助手">
 <title>ChatGPT</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='20' font-size='20'>✦</text></svg>">
 <link rel="stylesheet" href="assets/style.css">
@@ -35,6 +35,9 @@
 
   <!-- ===== 主体 ===== -->
   <div class="shell">
+
+    <!-- 移动端侧栏遮罩 -->
+    <div class="side-mask" id="sideMask"></div>
 
     <!-- 左侧会话栏 -->
     <aside class="sidebar" id="sidebar">
