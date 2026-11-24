@@ -78,6 +78,15 @@
   }
 
   /* ============ 轻量 Markdown ============ */
+  // 思考过程专用渲染：把推理按句切成多步，视觉上像逐条想法浮现
+  function thinkMd(text) {
+    var t = String(text == null ? '' : text).trim();
+    // 保留模型自己分的换行；若是一整段，按句号/分号/问号切成步骤（每步尽量一句）
+    if (!/[\n]/.test(t)) {
+      t = t.replace(/([。！？；])\s*/g, '$1\n');
+    }
+    return md(t);
+  }
   function md(text) {
     var s = esc(String(text == null ? '' : text).trim());
     s = s.replace(/```([\w-]*)\n?([\s\S]*?)```/g, function (m, lang, code) { return '<pre><code>' + code.replace(/^\n|\n$/g, '') + '</code></pre>'; });
@@ -152,7 +161,7 @@
     if (m.deepThink) {
       var secs = m.thinkSecs || 0;
       var label = m.thinking ? ('已深度思考' + (secs ? '（用时 ' + secs + ' 秒）' : '')) : '正在深度思考…';
-      var body = m.thinking ? md(m.thinking) : '<span class="think-wait"><span class="dots"><i></i><i></i><i></i></span> 正在梳理思路…</span>';
+      var body = m.thinking ? thinkMd(m.thinking) : '<span class="think-wait"><span class="dots"><i></i><i></i><i></i></span> 正在梳理思路…</span>';
       parts.push('<details class="think-panel"' + (m.thinkOpen ? ' open' : '') + '><summary><span class="think-ico">' + ICON.brain + '</span><span data-role="think-label">' + label + '</span><span class="think-caret">▾</span></summary><div class="think-body" data-role="think-body">' + body + '</div></details>');
     }
     parts.push('<div class="a-content" data-role="content">' + (m.content ? md(m.content) : '<span class="gen-wait"><span class="dots"><i></i><i></i><i></i></span> 正在生成回答…</span>') + '</div>');
@@ -344,18 +353,19 @@
   var sending = false, gen = 0;
   function setSending(v) { sending = v; var sb = $('#sendBtn'); if (sb) sb.disabled = v; sb && sb.classList.toggle('ready', !v && !!$('#msgInput').value.trim()); }
 
-  function typeText(el, text, myGen, done) {
+  function typeText(el, text, myGen, done, renderer) {
     if (!el) { if (done) done(); return; }
+    var render = renderer || md;
     var i = 0, step = Math.max(2, Math.ceil(text.length / 70)), speed = 12;
     el.classList.add('typing');
     function tick() {
       if (myGen !== gen || !el.isConnected) { el.classList.remove('typing'); return; } // 世代失效：静默停止，绝不触发完成
       i += step;
       if (i >= text.length) {
-        el.innerHTML = md(text); el.classList.remove('typing'); scrollBottom();
+        el.innerHTML = render(text); el.classList.remove('typing'); scrollBottom();
         if (done) done(); return;
       }
-      el.innerHTML = md(text.slice(0, i)) + '<span class="cursor">▍</span>';
+      el.innerHTML = render(text.slice(0, i)) + '<span class="cursor">▍</span>';
       scrollBottom(); setTimeout(tick, speed);
     }
     tick();
@@ -450,13 +460,13 @@
         aMsg.thinking = thinkText; aMsg.thinkSecs = Math.max(1, Math.round((now() - t0) / 1000)); save();
         var label = part(midVal, '[data-role="think-label"]');
         if (label) label.textContent = '已深度思考（用时 ' + aMsg.thinkSecs + ' 秒）';
-        typeText(part(midVal, '[data-role="think-body"]'), thinkText, myGen);
+        typeText(part(midVal, '[data-role="think-body"]'), thinkText, myGen, null, thinkMd);
       }).catch(function () {
         if (myGen !== gen) return;
         thinkText = '分析问题要点，梳理已知信息，考虑多种可能后给出稳妥的回答。';
         aMsg.thinking = thinkText; aMsg.thinkSecs = 1; save();
         var label = part(midVal, '[data-role="think-label"]'); if (label) label.textContent = '已深度思考（用时 1 秒）';
-        var b = part(midVal, '[data-role="think-body"]'); if (b) b.textContent = thinkText;
+        var b = part(midVal, '[data-role="think-body"]'); if (b) b.innerHTML = thinkMd(thinkText);
       });
     }
     function phaseAnswer() {
