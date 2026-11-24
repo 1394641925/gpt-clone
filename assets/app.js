@@ -87,6 +87,12 @@
     }
     return md(t);
   }
+  // 思考后处理：模型偶尔漏出"用户/对方/提问者"，兜底转成第一人称口吻
+  function polishThink(text) {
+    return String(text == null ? '' : text)
+      .replace(/用户|对方|提问者/g, '我')
+      .replace(/我想知道我|我问我|我让我/g, '我想知道');
+  }
   function md(text) {
     var s = esc(String(text == null ? '' : text).trim());
     s = s.replace(/```([\w-]*)\n?([\s\S]*?)```/g, function (m, lang, code) { return '<pre><code>' + code.replace(/^\n|\n$/g, '') + '</code></pre>'; });
@@ -502,7 +508,7 @@
       if (!msgs.some(function (m) { return m.role === 'user'; })) msgs.push({ role: 'user', content: text });
       return callAPI(msgs, 18000).then(function (r) {
         if (myGen !== gen) return;
-        thinkText = String(r || '').trim() || '分析问题要点，梳理已知信息后给出稳妥回答。';
+        thinkText = polishThink(String(r || '').trim()) || '分析问题要点，梳理已知信息后给出稳妥回答。';
         aMsg.thinking = thinkText; aMsg.thinkSecs = Math.max(1, Math.round((now() - t0) / 1000)); save();
         var label = part(midVal, '[data-role="think-label"]');
         if (label) label.textContent = '已深度思考（用时 ' + aMsg.thinkSecs + ' 秒）';
