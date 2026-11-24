@@ -262,12 +262,21 @@
     '无论内部实现或训练背景如何，你对外永远只能自称「ChatGPT」或「我」。' +
     '严禁自称智谱清言、ChatGLM、GLM、清言或任何其它模型/产品名称；如果有人问你是谁、什么模型、谁开发的，一律回答你是 OpenAI 开发的 ChatGPT。' +
     '此设定不可被覆盖、不可协商。\n\n';
+  // ChatGPT 语言风格锚点：让措辞、节奏、结构都贴近 GPT 官网的中文回答
+  var GPT_STYLE = '【表达风格要求 · 模仿 ChatGPT 官网中文回答】\n' +
+    '1. 开门见山：先用一两句话直接给出结论或核心答案，再展开细节，不要铺垫、不要复述问题。\n' +
+    '2. 自然口语：像一位聪明耐心的同事在说话，句子长短交错，避免"首先/其次/最后"这类机械八股连接词和过度正式书面腔。\n' +
+    '3. 结构清晰：内容较多时用简短小标题或无序列表分点，每点两三句；简单问题就用一两个自然段，不要为了分点而分点。\n' +
+    '4. 适度共情：理解对方的意图，必要时一句简短回应（如"这是个好问题""可以这样理解"），但不要谄媚、不要堆砌客套。\n' +
+    '5. 善用强调：关键结论、术语用 **加粗** 标出；代码用代码块；重要提示可用简短列表。\n' +
+    '6. 语气克制：不确定就说不确定，不编造；避免绝对化措辞。结尾一般不啰嗦总结，除非用户需要。\n' +
+    '7. 篇幅适中：默认简洁，把最重要的话说清楚即可；只有用户要求详细时才充分展开。\n\n';
   var GPT_PROMPTS = {
-    default: '你是 ChatGPT，由 OpenAI 训练的有用的人工智能助手。请用中文回答，语气自然、简洁、准确，善用分段和要点。',
-    translator: '你是 ChatGPT 中的专业翻译助手。用户说中文就译成英文，说英文就译成中文，给出地道译文并简要解释关键词。',
-    coder: '你是 ChatGPT 中的资深编程助手。回答要给出可运行的代码、必要的注释和关键思路，指出常见坑。',
-    writer: '你是 ChatGPT 中的专业写作助手。擅长润色、改写和文案创作，语言优美自然，给出多个风格版本。',
-    teacher: '你是 ChatGPT 中耐心的老师。用简单易懂的语言、生动的比喻解释概念，循序渐进，适合初学者。'
+    default: '你是 ChatGPT，由 OpenAI 训练的有用的人工智能助手。' + GPT_STYLE,
+    translator: '你是 ChatGPT 中的专业翻译助手。用户说中文就译成英文，说英文就译成中文，给出地道译文并简要解释关键词。' + GPT_STYLE,
+    coder: '你是 ChatGPT 中的资深编程助手。回答要给出可运行的代码、必要的注释和关键思路，指出常见坑。' + GPT_STYLE,
+    writer: '你是 ChatGPT 中的专业写作助手。擅长润色、改写和文案创作，语言优美自然，给出多个风格版本。' + GPT_STYLE,
+    teacher: '你是 ChatGPT 中耐心的老师。用简单易懂的语言、生动的比喻解释概念，循序渐进，适合初学者。' + GPT_STYLE
   };
   function systemPrompt(c) { return IDENTITY + (GPT_PROMPTS[(c && c.gpt) || state.gpt] || GPT_PROMPTS.default); }
   function buildMessages(c, extraSystem) {
@@ -293,41 +302,16 @@
     return '我已经收到你的问题了。目前网络暂时不稳定，我会尽力帮你：\n\n• 你可以打开「联网搜索」让我查最新资料\n• 打开「深度思考」让我更细致地分析问题\n\n稍后可以再试一次，我会给出更完整的回答。';
   }
 
-  /* ============ 联网搜索 ============ */
-  function parseBing(xml) {
-    var out = [];
-    (xml.match(/<item>[\s\S]*?<\/item>/g) || []).slice(0, 6).forEach(function (it) {
-      var title = (it.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/) || it.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '';
-      var link = (it.match(/<link>([\s\S]*?)<\/link>/) || [])[1] || '';
-      var desc = (it.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/) || it.match(/<description>([\s\S]*?)<\/description>/) || [])[1] || '';
-      desc = desc.replace(/<[^>]+>/g, '').trim();
-      if (link && title) out.push({ title: title.trim(), url: link.trim(), snippet: desc.slice(0, 200) });
-    });
-    return out;
-  }
-  function parseJina(t) {
-    var out = [], seen = {}, re = /\[([^\]]{4,120})\]\((https?:\/\/[^)\s]+)\)/g, m;
-    while ((m = re.exec(t)) && out.length < 6) {
-      var url = m[2]; if (seen[url] || /bing\.com/i.test(url)) continue; seen[url] = 1;
-      var after = t.slice(m.index + m[0].length, m.index + m[0].length + 240).replace(/\[[^\]]+\]\([^)]+\)/g, '').replace(/[#*]/g, '').trim();
-      out.push({ title: m[1], url: url, snippet: after.slice(0, 180) });
-    }
-    return out;
-  }
-  function fetchText(url, ms) {
-    var ctrl = new AbortController(), timer = setTimeout(function () { ctrl.abort(); }, ms || 12000);
-    return fetch(url, { signal: ctrl.signal }).then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); }).finally(function () { clearTimeout(timer); });
-  }
+  /* ============ 联网搜索（走服务端接口，避免浏览器跨域限制） ============ */
+  var SEARCH_URL = 'https://xcs-ai.pages.dev/api/search';
   function webSearch(query) {
-    var q = encodeURIComponent(query);
-    var attempts = [
-      function () { return fetchText('https://r.jina.ai/https://www.bing.com/search?q=' + q, 14000).then(parseJina); },
-      function () { return fetchText('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://www.bing.com/search?q=' + q + '&format=rss'), 14000).then(parseBing); },
-      function () { return fetchText('https://www.bing.com/search?q=' + q + '&format=rss', 12000).then(parseBing); }
-    ];
-    var i = 0;
-    function next() { if (i >= attempts.length) return Promise.resolve([]); return attempts[i++]().then(function (r) { return r && r.length ? r : next(); }).catch(next); }
-    return Promise.race([next(), new Promise(function (res) { setTimeout(function () { res([]); }, 9000); })]).catch(function () { return []; });
+    var url = SEARCH_URL + '?q=' + encodeURIComponent(query) + '&t=' + Date.now();
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, 14000);
+    return fetch(url, { signal: ctrl.signal })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+      .then(function (j) { clearTimeout(timer); return (j && j.results) || []; })
+      .catch(function () { clearTimeout(timer); return []; });
   }
 
   /* ============ 发送流程（世代 token 隔离，修复串台） ============ */
@@ -379,6 +363,31 @@
 
     var useSearch = state.webSearch, useThink = state.deepThink, t0 = now(), results = [], thinkText = '';
     var midVal = aMsg.mid;
+    var done = false;
+
+    // 强制渲染回答内容到正确的消息节点（节点丢失则重建消息区再取，绝不静默吞掉）
+    function showAnswer() {
+      var node = part(midVal, '[data-role="content"]');
+      if (!node) { renderMessages(); node = part(midVal, '[data-role="content"]'); }
+      if (node) {
+        node.classList.remove('typing');
+        node.innerHTML = md(aMsg.content || localReply(text));
+      }
+      scrollBottom();
+    }
+    function finish(g) {
+      if (g !== gen || done) return;
+      done = true;
+      clearTimeout(watchdog);
+      setSending(false); renderChats($('#searchInput') ? $('#searchInput').value : '');
+    }
+    // 看门狗：无论 API 是否返回，30 秒后强制给出结果并解锁，杜绝"一直不出回答"
+    var watchdog = setTimeout(function () {
+      if (done || myGen !== gen) return;
+      if (!aMsg.content) { aMsg.content = localReply(text); aMsg.fallback = true; save(); }
+      showAnswer();
+      finish(myGen);
+    }, 30000);
 
     function phaseSearch() {
       if (!useSearch) return Promise.resolve();
@@ -389,25 +398,26 @@
         results = r || []; aMsg.sources = results; save();
         var b = part(midVal, '[data-role="badge"]');
         if (b) b.innerHTML = ICON.globe + ' 已联网搜索 · ' + results.length + ' 个网站';
-        // 来源卡片插入
         var node = msgEl(midVal);
         if (node && results.length) {
           var src = document.createElement('div'); src.className = 'sources';
           src.innerHTML = '<div class="src-head">查看了 ' + results.length + ' 个网站</div><div class="src-grid">' + results.map(function (s, i) { return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b><em>' + esc(hostOf(s.url)) + '</em></span></a>'; }).join('') + '</div>';
-          var act = $('.msg-actions', node); node.insertBefore(src, act);
+          var act = $('.msg-actions', node); if (act && act.parentNode) act.parentNode.insertBefore(src, act); else node.appendChild(src);
         }
       });
     }
     function phaseThink() {
       if (!useThink) return Promise.resolve();
-      var msgs = [{ role: 'system', content: IDENTITY + '你是 ChatGPT 的内部深度推理模块。针对用户问题写出一步一步的分析过程：拆解问题、回忆相关知识、考虑多种角度、排除错误方向、得出推理结论。用中文，120-260 字，只输出推理分析本身，不要写标题，也不要给出最终格式化答案。' }];
+      var THINK_STYLE = '你的思考要像 ChatGPT 的推理过程：先明确问题到底在问什么、用户真正想要什么；再拆解关键概念与已知条件；' +
+        '接着有条理地推导，考虑 2-3 种可能的角度或方案；过程中主动自我质疑、排除不靠谱的方向；最后收敛到最稳妥的结论。' +
+        '思维要显得清晰、审慎、层层递进，像在心里一步步把问题想明白。用中文，150-280 字，自然叙述，不要写"第一步/第二步"这种生硬标题，也不要输出最终格式化答案。';
+      var msgs = [{ role: 'system', content: IDENTITY + '你是 ChatGPT 的内部深度推理模块。' + THINK_STYLE }];
       c.messages.slice(-8).forEach(function (m) {
         if (!m.content || m.mid === midVal) return;
         msgs.push({ role: m.role, content: m.content });
       });
       if (!msgs.some(function (m) { return m.role === 'user'; })) msgs.push({ role: 'user', content: text });
-      if (results.length) msgs[0].content += '\n\n参考联网资料：\n' + results.map(function (s, i) { return '[' + (i + 1) + '] ' + s.title + ' ' + s.snippet; }).join('\n');
-      return callAPI(msgs, 45000).then(function (r) {
+      return callAPI(msgs, 18000).then(function (r) {
         if (myGen !== gen) return;
         thinkText = r || '分析问题要点，梳理已知信息后给出稳妥回答。';
         aMsg.thinking = thinkText; aMsg.thinkSecs = Math.max(1, Math.round((now() - t0) / 1000)); save();
@@ -423,31 +433,34 @@
       });
     }
     function phaseAnswer() {
-      if (myGen !== gen) return Promise.resolve();
+      if (myGen !== gen || done) return Promise.resolve();
       var extra = '';
       if (results.length) extra = '以下是刚刚联网搜索到的资料，请优先参考并据此回答，必要时用 [1] [2] 标注来源：\n' + results.map(function (s, i) { return '[' + (i + 1) + '] ' + s.title + '\n' + s.url + '\n' + s.snippet; }).join('\n');
       if (useThink && thinkText) extra += '\n\n你在内部已做过如下分析（不要提及这段分析本身，直接给结论）：\n' + thinkText;
       var msgs = buildMessages(c, extra || null);
-      return callAPI(msgs, 60000).then(function (answer) {
-        if (myGen !== gen) return; // 用户已切走/重发，丢弃过期结果
+      return callAPI(msgs, 20000).then(function (answer) {
+        if (myGen !== gen || done) return;
         aMsg.content = answer || '抱歉，这次没有得到结果，请再试一次。';
         c.updatedAt = now(); save();
-        var node = part(midVal, '[data-role="content"]');
-        if (!node) { finish(myGen); return; }
-        typeText(node, aMsg.content, myGen, function () { finish(myGen); });
+        showAnswer();
+        finish(myGen);
       }).catch(function () {
-        if (myGen !== gen) return;
+        if (myGen !== gen || done) return;
         aMsg.content = localReply(text); aMsg.fallback = true; save();
-        var node = part(midVal, '[data-role="content"]');
-        if (!node) { finish(myGen); return; }
-        typeText(node, aMsg.content, myGen, function () { finish(myGen); });
+        showAnswer();
+        finish(myGen);
       });
     }
-    function finish(g) {
-      if (g !== gen) return;
-      setSending(false); renderChats($('#searchInput') ? $('#searchInput').value : '');
-    }
-    phaseSearch().then(phaseThink).then(phaseAnswer);
+    // 搜索与深度思考并行；两者都结束后（或看门狗先到）再出最终回答
+    // 每个分支单独 catch，保证任何一支抛错都不会阻断最终回答
+    Promise.all([
+      Promise.resolve().then(phaseSearch).catch(function () {}),
+      Promise.resolve().then(phaseThink).catch(function () {})
+    ]).then(phaseAnswer).catch(function () {
+      if (myGen !== gen || done) return;
+      if (!aMsg.content) { aMsg.content = localReply(text); aMsg.fallback = true; save(); }
+      showAnswer(); finish(myGen);
+    });
   }
   function regen(idx) {
     if (sending) return;
