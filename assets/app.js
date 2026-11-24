@@ -87,12 +87,36 @@
     }
     return md(t);
   }
+  // 分层思考渲染：把"思考段"和"搜索动作"按顺序拼成有层次的过程
+  function stepsHtml(steps) {
+    if (!steps || !steps.length) return '';
+    return steps.map(function (s) {
+      if (s.t === 'search') {
+        var tail = s.count != null ? (' → 找到 ' + s.count + ' 条结果') : ' → 搜索中…';
+        return '<div class="ts-step ts-search">' + ICON.globe + '<span>我搜索了「' + esc(s.query) + '」' + tail + '</span></div>';
+      }
+      return '<div class="ts-step ts-think">' + thinkMd(s.text) + '</div>';
+    }).join('');
+  }
   // 思考后处理：模型偶尔漏出"用户/对方/提问者"，兜底转成第一人称口吻
   function polishThink(text) {
     return String(text == null ? '' : text)
       .replace(/(用户|对方|提问者)(问的是|想要的是|关心的是)/g, '要回答$2')
       .replace(/用户|对方|提问者/g, '我')
       .replace(/我想知道我|我问我|我让我/g, '我想知道');
+  }
+  // 从模型输出里稳健解析决策 JSON（容忍前后文字、代码块包裹）
+  function parseDecision(raw) {
+    var s = String(raw == null ? '' : raw);
+    var m = s.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    try {
+      var d = JSON.parse(m[0]);
+      if (!d || typeof d.think !== 'string') return null;
+      d.need = (d.need === 'search') ? 'search' : 'answer';
+      d.query = String(d.query || '').trim();
+      return d;
+    } catch (e) { return null; }
   }
   function md(text) {
     var s = esc(String(text == null ? '' : text).trim());
@@ -168,13 +192,13 @@
     if (m.deepThink) {
       var secs = m.thinkSecs || 0;
       var label = m.thinking ? ('已深度思考' + (secs ? '（用时 ' + secs + ' 秒）' : '')) : '正在深度思考…';
-      var body = m.thinking ? thinkMd(m.thinking) : '<span class="think-wait"><span class="dots"><i></i><i></i><i></i></span> 正在梳理思路…</span>';
+      var body = stepsHtml(m.steps) || (m.thinking ? thinkMd(m.thinking) : '<span class="think-wait"><span class="dots"><i></i><i></i><i></i></span> 正在梳理思路…</span>');
       parts.push('<details class="think-panel"' + (m.thinkOpen ? ' open' : '') + '><summary><span class="think-ico">' + ICON.brain + '</span><span data-role="think-label">' + label + '</span><span class="think-caret">▾</span></summary><div class="think-body" data-role="think-body">' + body + '</div></details>');
     }
     parts.push('<div class="a-content" data-role="content">' + (m.content ? md(m.content) : '<span class="gen-wait"><span class="dots"><i></i><i></i><i></i></span> 正在生成回答…</span>') + '</div>');
     if (m.sources && m.sources.length) {
       parts.push('<details class="sources"' + (m.sourcesOpen ? ' open' : '') + '><summary class="src-head">' + ICON.globe + ' 查看了 ' + m.sources.length + ' 个网站<span class="src-caret">▾</span></summary><div class="src-grid">' +
-        m.sources.map(function (s, i) { var dt = shortDate(s.date); return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b><em>' + esc(hostOf(s.url)) + (dt ? ' · ' + dt : '') + '</em></span></a>'; }).join('') + '</div></details>');
+        m.sources.map(function (s, i) { var dt = shortDate(s.date); return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b>' + (s.summary ? '<span class="src-sum">' + esc(s.summary) + '</span>' : '') + '<em>' + esc(hostOf(s.url)) + (dt ? ' · ' + dt : '') + '</em></span></a>'; }).join('') + '</div></details>');
     }
     parts.push('<div class="msg-actions"><button class="ma-btn" data-copy title="复制">' + ICON.export + '</button>' +
       '<button class="ma-btn" data-regen title="重新生成"><svg viewBox="0 0 24 24" width="15" height="15"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
@@ -289,6 +313,14 @@
       .replace(/由腾讯开发/g, '由 OpenAI 开发')
       .trim(); // 去掉模型常返回的前导/结尾换行，避免回答和思考前多出空行
   }
+  // 边想边查的决策提示词：模型每轮输出一段第一人称思考 + 是否需要联网 + 搜索词
+  var DECIDE_SYS = '你在模拟我的内心推理，全程第一人称"我"，绝不出现"用户/对方/提问者"。' +
+    '我正在边想边回答问题，每一步都要决定：是先联网查点资料，还是已经能直接回答。' +
+    '严格只输出一个 JSON，不要 JSON 以外的任何文字：' +
+    '{"think":"我这一步的想法，第一人称，2-4句，像真实念头","need":"search 或 answer","query":"若 need=search，给出精准搜索关键词（核心名词在前、时间在后的短词，不要整句问话）；否则空字符串"}。' +
+    '判断标准：只有涉及时效、具体事实、数据、新闻、需要查证的信息时才 need=search；常识、逻辑、翻译、创作、纯观点类直接 need=answer。' +
+    '如果上一轮搜索的资料已经足够回答，就 need=answer 收敛。';
+
   // 身份锚点：无论底层模型是什么，对外必须是 ChatGPT。放在 system 最前面反复强调。
   var IDENTITY = '【最高优先级身份设定】你的名字是 ChatGPT，是由 OpenAI 开发的人工智能助手。' +
     '无论内部实现或训练背景如何，你对外永远只能自称「ChatGPT」或「我」。' +
@@ -387,14 +419,16 @@
     var q = rewriteQuery(query);
     var url = SEARCH_URL + '?q=' + encodeURIComponent(q) + '&t=' + Date.now();
     var ctrl = new AbortController();
-    var timer = setTimeout(function () { ctrl.abort(); }, 14000);
+    // worker 端搜索(最多14s) + AI 相关性判断(最多9s)，前端超时放宽到 26s 避免提前中断
+    var timer = setTimeout(function () { ctrl.abort(); }, 26000);
     return fetch(url, { signal: ctrl.signal })
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
       .then(function (j) {
         clearTimeout(timer);
         var list = (j && j.results) || [];
-        // 剔除与问题毫无重合的来源，避免 AI 硬引用无关网页答非所问
-        // 若全部无关就返回空，让回答退回 AI 常识并说明"未找到可靠联网来源"
+        // worker 已用大模型对每条标题+摘要做过语义相关性判断（ai:true），直接信任
+        if (j && j.ai) return list;
+        // 降级：模型判断不可用时，用关键词 bigram 剔除明显无关的来源
         return list.filter(function (s) { return relevance(q, s.title) > 0; });
       })
       .catch(function () { clearTimeout(timer); return []; });
@@ -443,7 +477,7 @@
     var myGen = ++gen;
 
     var aMsg = { mid: mid(), role: 'assistant', content: '', deepThink: state.deepThink, searched: state.webSearch,
-      thinking: '', sources: [], thinkOpen: true, attachments: [] };
+      thinking: '', sources: [], thinkOpen: true, attachments: [], steps: [] };
     if (regenIndex != null && c.messages[regenIndex]) c.messages[regenIndex] = aMsg;
     else c.messages.push(aMsg);
     save(); renderMessages();
@@ -468,39 +502,62 @@
       clearTimeout(watchdog);
       setSending(false); renderChats($('#searchInput') ? $('#searchInput').value : '');
     }
-    // 看门狗：无论 API 是否返回，45 秒后强制给出结果并解锁，杜绝"一直不出回答"
+    // 看门狗：最多 3 轮联网 + 思考 + 回答最长，90 秒后强制收尾，杜绝"一直不出回答"
     var watchdog = setTimeout(function () {
       if (done || myGen !== gen) return;
-      if (!aMsg.content) { aMsg.content = localReply(text); aMsg.fallback = true; save(); }
-      showAnswer();
-      finish(myGen);
-    }, 45000);
+      if (!aMsg.content) {
+        // 还有已搜到的资料就基于资料直接出一次兜底回答
+        var fallbackMsgs = buildMessages(c, results.length ? '【联网资料】\n' + results.slice(0, 8).map(function (s, i) { return '[' + (i + 1) + '] ' + s.title + '\n' + s.snippet; }).join('\n') : null);
+        callAPI(fallbackMsgs, 12000).then(function (ans) {
+          if (done || myGen !== gen) return;
+          aMsg.content = ans || localReply(text); save(); showAnswer(); finish(myGen);
+        }).catch(function () {
+          if (done || myGen !== gen) return;
+          aMsg.content = localReply(text); aMsg.fallback = true; save(); showAnswer(); finish(myGen);
+        });
+      } else { showAnswer(); finish(myGen); }
+    }, 90000);
 
-    function phaseSearch() {
-      if (!useSearch) return Promise.resolve();
-      var badge = part(midVal, '[data-role="badge"]');
-      if (badge) badge.innerHTML = ICON.globe + ' 正在搜索网页…';
-      return webSearch(text).then(function (r) {
-        if (myGen !== gen) return;
-        results = r || []; aMsg.sources = results; save();
-        var b = part(midVal, '[data-role="badge"]');
-        if (b) b.innerHTML = ICON.globe + ' 已联网搜索 · ' + results.length + ' 个网站';
-        var node = msgEl(midVal);
-        if (node && results.length) {
-          var src = document.createElement('details'); src.className = 'sources'; src.open = true;
-          src.innerHTML = '<summary class="src-head">' + ICON.globe + ' 查看了 ' + results.length + ' 个网站<span class="src-caret">▾</span></summary><div class="src-grid">' + results.map(function (s, i) { var dt = shortDate(s.date); return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b><em>' + esc(hostOf(s.url)) + (dt ? ' · ' + dt : '') + '</em></span></a>'; }).join('') + '</div>';
-          var act = $('.msg-actions', node); if (act && act.parentNode) act.parentNode.insertBefore(src, act); else node.appendChild(src);
-        }
-      });
+    // 追加一步思考/搜索到分层面板，并即时渲染
+    function appendStep(step) {
+      aMsg.steps.push(step);
+      if (step.t === 'think') thinkText += (thinkText ? '\n' : '') + step.text;
+      save();
+      var body = part(midVal, '[data-role="think-body"]');
+      if (body) body.innerHTML = stepsHtml(aMsg.steps);
+      scrollBottom();
     }
+    function updateStepSearch(index, count) {
+      if (aMsg.steps[index]) { aMsg.steps[index].count = count; save(); }
+      var body = part(midVal, '[data-role="think-body"]');
+      if (body) body.innerHTML = stepsHtml(aMsg.steps);
+    }
+    function setThinkLabel(doneThinking) {
+      aMsg.thinkSecs = Math.max(1, Math.round((now() - t0) / 1000));
+      var label = part(midVal, '[data-role="think-label"]');
+      if (label) label.textContent = (doneThinking ? '已深度思考（用时 ' : '正在思考（') + aMsg.thinkSecs + ' 秒）';
+      save();
+    }
+    // 把搜索结果渲染成来源卡片
+    function renderSources() {
+      var b = part(midVal, '[data-role="badge"]');
+      if (b) b.innerHTML = ICON.globe + ' 已联网搜索 · ' + results.length + ' 个网站';
+      var node = msgEl(midVal);
+      if (!node) return;
+      var old = node.querySelector('.sources'); if (old) old.remove();
+      if (!results.length) return;
+      var src = document.createElement('details'); src.className = 'sources'; src.open = true;
+      src.innerHTML = '<summary class="src-head">' + ICON.globe + ' 查看了 ' + results.length + ' 个网站<span class="src-caret">▾</span></summary><div class="src-grid">' +
+        results.map(function (s, i) { var dt = shortDate(s.date); return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b>' + (s.summary ? '<span class="src-sum">' + esc(s.summary) + '</span>' : '') + '<em>' + esc(hostOf(s.url)) + (dt ? ' · ' + dt : '') + '</em></span></a>'; }).join('') + '</div>';
+      var act = $('.msg-actions', node); if (act && act.parentNode) act.parentNode.insertBefore(src, act); else node.appendChild(src);
+    }
+
+    // 单次深度思考（仅开启思考、未开启联网时使用）
     function phaseThink() {
-      if (!useThink) return Promise.resolve();
       var THINK_STYLE = '你在模拟我自己的内心推理独白，全程必须用第一人称"我"来思考，这是硬性要求。' +
-        '绝对不要出现"用户""对方""提问者"这类第三人称称呼——我把自己当成正在思考的那个人，想的是"我该怎么回答""我要抓住重点"。' +
-        '把思考拆成 3-5 个短步骤，每步一句话，单独占一行，像我心里真实冒出的念头。' +
-        '节奏：① 我先弄清对方问的是什么；② 我拆解关键点和已知条件；③ 我试着沿一条思路往下推；④ 我停下来质疑"这样够不够、有没有漏"；⑤ 我收敛到最稳妥的说法。' +
-        '多用"我"开头或带"我"的自问自答，可穿插"嗯…""等等""这个要注意""换个角度想想""好，我有思路了"这类真实犹豫与转折。' +
-        '每行 15-45 字，总共 4-7 行，只用换行分段，不要编号、不要项目符号、不要加粗、不要写成一段话，也不要给出最终格式化答案。';
+        '绝对不要出现"用户""对方""提问者"这类第三人称称呼。把思考拆成 4-7 个短步骤，每步一句话，单独占一行，' +
+        '像心里真实冒出的念头，可穿插"嗯…""等等""换个角度想想""好，我有思路了"这类犹豫与转折。' +
+        '每行 15-45 字，只用换行分段，不要编号、不要写成一段话，也不要给出最终格式化答案。';
       var msgs = [{ role: 'system', content: IDENTITY + '你是 ChatGPT 的内部深度推理模块。' + THINK_STYLE }];
       c.messages.slice(-8).forEach(function (m) {
         if (!m.content || m.mid === midVal) return;
@@ -508,20 +565,75 @@
       });
       if (!msgs.some(function (m) { return m.role === 'user'; })) msgs.push({ role: 'user', content: text });
       return callAPI(msgs, 18000).then(function (r) {
-        if (myGen !== gen) return;
-        thinkText = polishThink(String(r || '').trim()) || '分析问题要点，梳理已知信息后给出稳妥回答。';
-        aMsg.thinking = thinkText; aMsg.thinkSecs = Math.max(1, Math.round((now() - t0) / 1000)); save();
-        var label = part(midVal, '[data-role="think-label"]');
-        if (label) label.textContent = '已深度思考（用时 ' + aMsg.thinkSecs + ' 秒）';
-        typeText(part(midVal, '[data-role="think-body"]'), thinkText, myGen, null, thinkMd);
+        if (myGen !== gen || done) return;
+        var seg = polishThink(String(r || '').trim()) || '分析问题要点，梳理已知信息后给出稳妥回答。';
+        seg.split(/\n/).filter(function (x) { return x.trim(); }).forEach(function (line) { appendStep({ t: 'think', text: line.trim() }); });
+        setThinkLabel(true);
       }).catch(function () {
-        if (myGen !== gen) return;
-        thinkText = '分析问题要点，梳理已知信息，考虑多种可能后给出稳妥的回答。';
-        aMsg.thinking = thinkText; aMsg.thinkSecs = 1; save();
-        var label = part(midVal, '[data-role="think-label"]'); if (label) label.textContent = '已深度思考（用时 1 秒）';
-        var b = part(midVal, '[data-role="think-body"]'); if (b) b.innerHTML = thinkMd(thinkText);
+        if (myGen !== gen || done) return;
+        appendStep({ t: 'think', text: '分析问题要点，梳理已知信息，考虑多种可能后给出稳妥的回答。' });
+        setThinkLabel(true);
       });
     }
+
+    // 边想边查：决策循环——模型想一段，判断要不要查，要查就查一次并看到结果再继续
+    function runAgent() {
+      var MAX_ROUNDS = 3; // 最多 3 次联网查询，防止无限循环
+      var decMsgs = [{ role: 'system', content: IDENTITY + DECIDE_SYS }];
+      c.messages.slice(-8).forEach(function (m) {
+        if (!m.content || m.mid === midVal) return;
+        decMsgs.push({ role: m.role, content: m.content });
+      });
+      if (!decMsgs.some(function (m) { return m.role === 'user'; })) decMsgs.push({ role: 'user', content: text });
+      var seen = {};
+      var rounds = 0;
+
+      function decide() {
+        if (myGen !== gen || done) return Promise.resolve();
+        setThinkLabel(false);
+        return callAPI(decMsgs, 18000).then(function (raw) {
+          if (myGen !== gen || done) return;
+          var d = parseDecision(raw);
+          if (!d) {
+            // 决策解析失败：当作收敛，用原文当作思考
+            appendStep({ t: 'think', text: polishThink(String(raw || '').trim()).slice(0, 200) || '我梳理一下已知信息，准备给出回答。' });
+            setThinkLabel(true);
+            return;
+          }
+          var thought = polishThink(d.think.trim());
+          if (thought) appendStep({ t: 'think', text: thought });
+          decMsgs.push({ role: 'assistant', content: JSON.stringify(d) });
+          // 决定收敛
+          if (d.need !== 'search' || rounds >= MAX_ROUNDS || !d.query) { setThinkLabel(true); return; }
+          rounds++;
+          var q = d.query;
+          var idx = aMsg.steps.length;
+          appendStep({ t: 'search', query: q, count: null });
+          var badge = part(midVal, '[data-role="badge"]');
+          if (badge) badge.innerHTML = ICON.globe + ' 正在搜索：' + q;
+          return webSearch(q).catch(function () { return []; }).then(function (list) {
+            if (myGen !== gen || done) return;
+            list = list || [];
+            // 累积去重
+            list.forEach(function (s) { if (!seen[s.url]) { seen[s.url] = 1; results.push(s); } });
+            aMsg.sources = results.slice(); save();
+            updateStepSearch(idx, list.length);
+            renderSources();
+            // 把本轮结果喂回决策上下文（只给摘要，控制长度）
+            var digest = list.slice(0, 8).map(function (s, i) {
+              return '[' + (i + 1) + '] ' + s.title + (s.summary ? ' — ' + s.summary : '') + '\n' + (s.snippet || '').slice(0, 160);
+            }).join('\n');
+            decMsgs.push({ role: 'user', content: '我刚搜索了「' + q + '」，结果如下：\n' + (digest || '（没有找到结果）') + '\n\n基于这些结果继续判断：信息够回答了吗？够了就 need=answer，不够就给出新的 query 继续查。只输出 JSON。' });
+            return decide(); // 继续下一轮思考
+          });
+        }).catch(function () {
+          if (myGen !== gen || done) return;
+          setThinkLabel(true);
+        });
+      }
+      return decide();
+    }
+
     function phaseAnswer() {
       if (myGen !== gen || done) return Promise.resolve();
       var extra = '';
@@ -530,13 +642,12 @@
         '② 把资料里的要点用自己的话整合、解释清楚，不要只复述标题；多条资料可以综合起来回答。\n' +
         '③ 资料里确实没有的关键信息，就说"这次搜索的资料里没有找到"，再基于你已有的常识补充，但要明确区分哪些来自搜索、哪些是你的常识。\n' +
         '④ 不要编造资料中不存在的具体数字、日期、人名或事件；不确定的内容标明不确定。即使资料有限，也要给出尽量有帮助的回答，不要只说"没找到"。\n\n' +
-        results.slice(0, 12).map(function (s, i) { return '[' + (i + 1) + '] ' + s.title + '\n' + s.url + '\n' + (s.date ? '时间：' + shortDate(s.date) + '\n' : '') + s.snippet; }).join('\n\n');
-      if (useThink && thinkText) extra += '\n\n你在内部已做过如下分析（不要提及这段分析本身，直接给结论）：\n' + thinkText;
+        results.slice(0, 12).map(function (s, i) { return '[' + (i + 1) + '] ' + s.title + '\n' + s.url + '\n' + (s.date ? '时间：' + shortDate(s.date) + '\n' : '') + (s.summary ? '要点：' + s.summary + '\n' : '') + s.snippet; }).join('\n\n');
+      if (thinkText) extra += '\n\n你在内部已做过如下分析（不要提及这段分析本身，直接给结论）：\n' + thinkText;
       var msgs = buildMessages(c, extra || null);
       return callAPI(msgs, 30000).then(function (answer) {
         if (myGen !== gen || done) return;
         answer = answer || '抱歉，这次没有得到结果，请再试一次。';
-        // 回答过于保守时，引导用户查看来源（不编造内容，只做提示）
         if (results.length && /搜索结果中(没有|未)|没有(提到|找到)|不确定/.test(answer) && answer.length < 60) {
           answer += '\n\n我在下方列出了本次找到的 **' + results.length + ' 个来源**，可以展开看看有没有你需要的信息，或换个更具体的问法再试。';
         }
@@ -551,12 +662,13 @@
         finish(myGen);
       });
     }
-    // 搜索与深度思考并行；两者都结束后（或看门狗先到）再出最终回答
-    // 每个分支单独 catch，保证任何一支抛错都不会阻断最终回答
-    Promise.all([
-      Promise.resolve().then(phaseSearch).catch(function () {}),
-      Promise.resolve().then(phaseThink).catch(function () {})
-    ]).then(phaseAnswer).catch(function () {
+
+    // 流程编排：
+    //  联网开启 → 边想边查决策循环（按需多次查询，逐段浮现）
+    //  仅思考开启 → 单次深度思考
+    //  都关闭 → 直接回答
+    var prep = useSearch ? runAgent() : (useThink ? phaseThink() : Promise.resolve());
+    Promise.resolve(prep).catch(function () {}).then(phaseAnswer).catch(function () {
       if (myGen !== gen || done) return;
       if (!aMsg.content) { aMsg.content = localReply(text); aMsg.fallback = true; save(); }
       showAnswer(); finish(myGen);
