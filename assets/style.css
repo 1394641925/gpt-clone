@@ -1,4 +1,4 @@
-/* 高仿 ChatGPT 桌面客户端 · 本地演示 */
+/* ChatGPT 客户端界面样式 */
 :root{
   --bg:#ffffff; --bg-2:#f9f9f9; --sidebar:#f9f9f9; --hover:#ececec; --active:#e8e8e8;
   --text:#0d0d0d; --text-2:#5d5d5d; --text-3:#8f8f8f; --line:#e5e5e5; --line-2:#ededed;
@@ -335,15 +335,25 @@ html.dark .mode-btn.on{color:#7db2ff;border-color:rgba(125,178,255,.35)}
 /* ===== 响应式 ===== */
 @media(max-width:900px){ .canvas{display:none!important} }
 @media(max-width:760px){
-  .sidebar{position:absolute;z-index:100;top:38px;bottom:0;left:0;box-shadow:var(--shadow)}
+  /* 移动端复刻官网：隐藏桌面窗口标题栏 */
+  .titlebar{display:none!important}
+  .title-center{display:none}
+  .sidebar{position:absolute;z-index:100;top:0;bottom:0;left:0;box-shadow:var(--shadow);width:280px;flex-basis:280px}
   .sidebar.collapsed{box-shadow:none}
   #mobileMenuBtn{display:flex}
-  .rail.show{width:0;flex-basis:0;padding:0}
-  .messages{padding:24px 14px 32px}
+  .rail{display:none!important}
+  .chat-header{height:52px;flex:0 0 52px}
+  .messages{padding:22px 14px 32px}
   .composer-wrap{padding:0 10px 8px}
-  .title-center{display:none}
   .suggestions{grid-template-columns:1fr}
+  /* 模式按钮在窄屏只显示图标 */
   .mode-btn span,.cb-chip span{display:none}
-  .mode-btn,.cb-chip{padding:0 8px}
+  .mode-btn,.cb-chip{padding:0 9px;width:32px;justify-content:center}
+  /* 下拉菜单在窄屏右对齐，避免溢出 */
+  .dropdown{min-width:170px;max-width:calc(100vw - 24px)}
+  .chat-header .dropdown{right:8px;left:auto!important}
+  /* 侧栏移动遮罩 */
+  .side-mask{position:absolute;inset:0;background:rgba(0,0,0,.4);z-index:90;opacity:0;pointer-events:none;transition:opacity .25s}
+  .side-mask.show{opacity:1;pointer-events:auto}
 }
 @media(prefers-reduced-motion:reduce){ *{animation-duration:.01ms!important;transition-duration:.01ms!important} }
