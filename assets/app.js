@@ -90,6 +90,7 @@
   // 思考后处理：模型偶尔漏出"用户/对方/提问者"，兜底转成第一人称口吻
   function polishThink(text) {
     return String(text == null ? '' : text)
+      .replace(/(用户|对方|提问者)(问的是|想要的是|关心的是)/g, '要回答$2')
       .replace(/用户|对方|提问者/g, '我')
       .replace(/我想知道我|我问我|我让我/g, '我想知道');
   }
