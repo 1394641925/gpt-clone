@@ -640,6 +640,19 @@
     if (window.innerWidth <= 760) { $('#sidebar').classList.add('collapsed'); $('#sideMask').classList.remove('show'); }
   }
   function openSideOnMobile() { $('#sidebar').classList.remove('collapsed'); if (window.innerWidth <= 760) $('#sideMask').classList.add('show'); }
+  // 桌面/移动通用的侧栏开关：根据当前状态真正切换，而不是只会收起
+  function toggleSide() {
+    var sb = $('#sidebar'), rail = $('#rail'), mask = $('#sideMask');
+    if (sb.classList.contains('collapsed')) {
+      sb.classList.remove('collapsed');
+      rail.classList.remove('show');
+      if (window.innerWidth <= 760) mask.classList.add('show');
+    } else {
+      sb.classList.add('collapsed');
+      mask.classList.remove('show');
+      if (window.innerWidth > 760) rail.classList.add('show');
+    }
+  }
 
   /* ============ 事件绑定 ============ */
   function bind() {
@@ -717,7 +730,7 @@
     var menuData = {
       file: [['新建对话', newChat], ['重命名对话', function () { var c = activeChat(); if (c) openRename(c.id, c.title); }], ['sep'], ['导出当前对话', function () { var c = activeChat(); if (c) exportChat(c.id); }], ['删除当前对话', function () { if (state.activeId) deleteChat(state.activeId); }]],
       edit: [['复制上一条回答', function () { var c = activeChat(); if (!c) return; for (var i = c.messages.length - 1; i >= 0; i--) if (c.messages[i].role === 'assistant') { copyText(c.messages[i].content); toast('已复制'); break; } }], ['复制全部内容', function () { var c = activeChat(); if (c) { copyText(c.messages.map(function (m) { return (m.role === 'user' ? '你: ' : 'ChatGPT: ') + (m.content || ''); }).join('\n\n')); toast('已复制全部内容'); } }], ['sep'], ['清空输入框', function () { $('#msgInput').value = ''; pendingAttachments = []; renderAttachments(); autoGrow(); }]],
-      view: [['切换主题', toggleTheme], ['显示/隐藏侧栏', function () { $('#sideCollapse').click(); }], ['sep'], ['画布面板', function () { $('#canvasToggle').click(); }], ['探索 GPT', openExplore]],
+      view: [['切换主题', toggleTheme], ['显示/隐藏侧栏', toggleSide], ['sep'], ['画布面板', function () { $('#canvasToggle').click(); }], ['探索 GPT', openExplore]],
       help: [['关于 ChatGPT', function () { toast('ChatGPT · 由 OpenAI 开发的 AI 助手'); }], ['快捷键说明', function () { toast('Enter 发送 · Shift+Enter 换行'); }]]
     };
     $$('.menu-item').forEach(function (b) { b.addEventListener('click', function (e) {
@@ -727,7 +740,26 @@
       $$('button', d).forEach(function (item, i) { var real = (menuData[key] || []).filter(function (x) { return x[0] !== 'sep'; })[i]; item.addEventListener('click', function () { d.classList.remove('show'); real && real[1] && real[1](); }); });
     }); });
 
-    window.addEventListener('resize', autoGrow);
+    // 窗口尺寸跨越 760 断点时同步侧栏，避免出现「侧栏和窄条同时消失、打不开」的死角
+    var wasMobile = window.innerWidth <= 760;
+    window.addEventListener('resize', function () {
+      autoGrow();
+      var isMobile = window.innerWidth <= 760;
+      if (isMobile === wasMobile) return;
+      wasMobile = isMobile;
+      var sb = $('#sidebar'), rail = $('#rail');
+      if (isMobile) {
+        // 进入窄屏：收起侧栏、隐藏窄条，交给汉堡按钮控制
+        sb.classList.add('collapsed');
+        rail.classList.remove('show');
+        $('#sideMask').classList.remove('show');
+      } else {
+        // 回到桌面：只要侧栏收着就一定要露出窄条，保证有入口能展开
+        if (sb.classList.contains('collapsed')) rail.classList.add('show');
+        else rail.classList.remove('show');
+        $('#sideMask').classList.remove('show');
+      }
+    });
   }
   var renameTarget = null;
   function openRename(id, title) { renameTarget = id; $('#renameInput').value = title; $('#modalTitle').textContent = '重命名对话'; $('#renameMask').classList.add('show'); setTimeout(function () { $('#renameInput').focus(); }, 50); }
