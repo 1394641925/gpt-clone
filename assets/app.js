@@ -20,6 +20,14 @@
     });
   }
   function hostOf(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return '网页'; } }
+  // 把 "周一, 24 11月 2026 06:42:00 GMT" 精简为 "2026-11-24"
+  function shortDate(d) {
+    if (!d) return '';
+    var m = String(d).match(/(\d{1,2})\s*(\d{1,2})月\s*(\d{4})/);
+    if (m) return m[3] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0');
+    var m2 = String(d).match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+    return m2 ? m2[1] + '-' + String(m2[2]).padStart(2, '0') + '-' + String(m2[3]).padStart(2, '0') : '';
+  }
 
   /* ============ SVG 图标（替代 emoji，避免劣质观感） ============ */
   var ICON = {
@@ -142,8 +150,8 @@
     }
     parts.push('<div class="a-content" data-role="content">' + (m.content ? md(m.content) : '<span class="gen-wait"><span class="dots"><i></i><i></i><i></i></span> 正在生成回答…</span>') + '</div>');
     if (m.sources && m.sources.length) {
-      parts.push('<div class="sources"><div class="src-head">查看了 ' + m.sources.length + ' 个网站</div><div class="src-grid">' +
-        m.sources.map(function (s, i) { return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b><em>' + esc(hostOf(s.url)) + '</em></span></a>'; }).join('') + '</div></div>');
+      parts.push('<details class="sources"' + (m.sourcesOpen ? ' open' : '') + '><summary class="src-head">' + ICON.globe + ' 查看了 ' + m.sources.length + ' 个网站<span class="src-caret">▾</span></summary><div class="src-grid">' +
+        m.sources.map(function (s, i) { var dt = shortDate(s.date); return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b><em>' + esc(hostOf(s.url)) + (dt ? ' · ' + dt : '') + '</em></span></a>'; }).join('') + '</div></details>');
     }
     parts.push('<div class="msg-actions"><button class="ma-btn" data-copy title="复制">' + ICON.export + '</button>' +
       '<button class="ma-btn" data-regen title="重新生成"><svg viewBox="0 0 24 24" width="15" height="15"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
@@ -278,7 +286,10 @@
     writer: '你是 ChatGPT 中的专业写作助手。擅长润色、改写和文案创作，语言优美自然，给出多个风格版本。' + GPT_STYLE,
     teacher: '你是 ChatGPT 中耐心的老师。用简单易懂的语言、生动的比喻解释概念，循序渐进，适合初学者。' + GPT_STYLE
   };
-  function systemPrompt(c) { return IDENTITY + (GPT_PROMPTS[(c && c.gpt) || state.gpt] || GPT_PROMPTS.default); }
+  var FACT_RULE = '【准确性要求 · 防止编造】只陈述你确信的信息。对于具体数字、日期、人名、事件、统计数据、网址、专业术语，' +
+    '如果没有可靠依据，宁可说"我不确定"或"我没有这方面的可靠信息"，也不要猜测或编造一个看似合理的答案。' +
+    '不确定的内容要明确标注为不确定，不要把推测包装成事实。\n\n';
+  function systemPrompt(c) { return IDENTITY + FACT_RULE + (GPT_PROMPTS[(c && c.gpt) || state.gpt] || GPT_PROMPTS.default); }
   function buildMessages(c, extraSystem) {
     var msgs = [{ role: 'system', content: systemPrompt(c) + (extraSystem ? '\n\n' + extraSystem : '') }];
     c.messages.slice(-10).forEach(function (m) {
@@ -400,8 +411,8 @@
         if (b) b.innerHTML = ICON.globe + ' 已联网搜索 · ' + results.length + ' 个网站';
         var node = msgEl(midVal);
         if (node && results.length) {
-          var src = document.createElement('div'); src.className = 'sources';
-          src.innerHTML = '<div class="src-head">查看了 ' + results.length + ' 个网站</div><div class="src-grid">' + results.map(function (s, i) { return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b><em>' + esc(hostOf(s.url)) + '</em></span></a>'; }).join('') + '</div>';
+          var src = document.createElement('details'); src.className = 'sources'; src.open = true;
+          src.innerHTML = '<summary class="src-head">' + ICON.globe + ' 查看了 ' + results.length + ' 个网站<span class="src-caret">▾</span></summary><div class="src-grid">' + results.map(function (s, i) { var dt = shortDate(s.date); return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b><em>' + esc(hostOf(s.url)) + (dt ? ' · ' + dt : '') + '</em></span></a>'; }).join('') + '</div>';
           var act = $('.msg-actions', node); if (act && act.parentNode) act.parentNode.insertBefore(src, act); else node.appendChild(src);
         }
       });
@@ -435,12 +446,21 @@
     function phaseAnswer() {
       if (myGen !== gen || done) return Promise.resolve();
       var extra = '';
-      if (results.length) extra = '以下是刚刚联网搜索到的资料，请优先参考并据此回答，必要时用 [1] [2] 标注来源：\n' + results.map(function (s, i) { return '[' + (i + 1) + '] ' + s.title + '\n' + s.url + '\n' + s.snippet; }).join('\n');
+      if (results.length) extra = '【联网资料 · 严格遵守】下面是刚刚搜索到的资料。回答时必须遵守：\n' +
+        '① 只依据这些资料回答，用 [1] [2] 标注来源；资料里没有的信息，明确说"搜索结果中没有提到"，绝不能自己编造。\n' +
+        '② 禁止编造任何具体数字、日期、人名、事件、数据或引用；不确定的内容一律不要写。\n' +
+        '③ 如果资料不足以回答，就如实说明并给出你能确认的部分，不要拼凑出看似完整的答案。\n\n' +
+        results.map(function (s, i) { return '[' + (i + 1) + '] ' + s.title + '\n' + s.url + '\n' + s.snippet; }).join('\n');
       if (useThink && thinkText) extra += '\n\n你在内部已做过如下分析（不要提及这段分析本身，直接给结论）：\n' + thinkText;
       var msgs = buildMessages(c, extra || null);
       return callAPI(msgs, 20000).then(function (answer) {
         if (myGen !== gen || done) return;
-        aMsg.content = answer || '抱歉，这次没有得到结果，请再试一次。';
+        answer = answer || '抱歉，这次没有得到结果，请再试一次。';
+        // 回答过于保守时，引导用户查看来源（不编造内容，只做提示）
+        if (results.length && /搜索结果中(没有|未)|没有(提到|找到)|不确定/.test(answer) && answer.length < 60) {
+          answer += '\n\n我在下方列出了本次找到的 **' + results.length + ' 个来源**，可以展开看看有没有你需要的信息，或换个更具体的问法再试。';
+        }
+        aMsg.content = answer;
         c.updatedAt = now(); save();
         showAnswer();
         finish(myGen);
