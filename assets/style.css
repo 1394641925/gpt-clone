@@ -180,14 +180,14 @@ html.dark .search-badge{color:#7db2ff;background:rgba(125,178,255,.12)}
 
 /* 深度思考面板 */
 .think-panel{margin-bottom:12px;border-left:2px solid var(--line);padding:2px 0 2px 12px;transition:border-color .2s}
-.think-panel[open]{border-color:var(--text-3)}
+.think-panel.fold-open{border-color:var(--text-3)}
 .think-panel summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-2);user-select:none;padding:2px 0}
 .think-panel summary::-webkit-details-marker{display:none}
 .think-ico{color:var(--text-3);display:flex}
-.think-caret{margin-left:auto;transition:transform .25s var(--ease);color:var(--text-3)}
+.think-caret{margin-left:auto;transition:transform .4s var(--ease);color:var(--text-3)}
 .think-panel.fold-open .think-caret{transform:rotate(180deg)}
 .think-panel.fold-closed .think-body{max-height:0;opacity:0}
-.think-body{font-size:13px;color:var(--text-3);line-height:1.85;padding-top:8px;white-space:pre-wrap;word-break:break-word;overflow:hidden;transition:max-height .3s var(--ease),opacity .25s var(--ease)}
+.think-body{font-size:13px;color:var(--text-3);line-height:1.85;padding-top:8px;white-space:pre-wrap;word-break:break-word;overflow:hidden;transition:max-height .5s var(--ease),opacity .4s var(--ease)}
 .think-body.typing{color:var(--text-2)}
 /* 分层思考：思考段 + 搜索动作，逐段浮现 */
 .ts-step{white-space:normal;animation:fadeUp .3s var(--ease);margin:2px 0}
@@ -202,10 +202,10 @@ html.dark .search-badge{color:#7db2ff;background:rgba(125,178,255,.12)}
   border-radius:9px;background:var(--bg-2);transition:background .15s}
 .src-head::-webkit-details-marker{display:none}
 .src-head:hover{background:var(--hover)}
-.src-head .src-caret{margin-left:auto;transition:transform .2s var(--ease);color:var(--text-3)}
+.src-head .src-caret{margin-left:auto;transition:transform .4s var(--ease);color:var(--text-3)}
 .sources.fold-open .src-caret{transform:rotate(180deg)}
 .sources.fold-closed .src-grid{max-height:0;opacity:0}
-.src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:8px;overflow:hidden;transition:max-height .3s var(--ease),opacity .25s var(--ease)}
+.src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:8px;overflow:hidden;transition:max-height .5s var(--ease),opacity .4s var(--ease)}
 .src-card{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;
   text-decoration:none;color:var(--text);background:var(--bg-2);transition:background .15s,border-color .15s,transform .12s;min-width:0}
 .src-card:hover{background:var(--hover);border-color:var(--text-3);transform:translateY(-2px)}
