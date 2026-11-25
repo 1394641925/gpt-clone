@@ -790,10 +790,10 @@
       var old = node.querySelector('.sources'); if (old) old.remove();
       if (!results.length) return;
       var src = document.createElement('details'); src.className = 'sources ' + (aMsg.sourcesOpen ? 'fold-open' : 'fold-closed'); src.open = !!aMsg.sourcesOpen;
-      bindFold(src, function (open) { aMsg.sourcesOpen = open; save(); });
       src.innerHTML = '<summary class="src-head">' + ICON.globe + ' 查看了 ' + results.length + ' 个网站<span class="src-caret">▾</span></summary><div class="src-grid">' +
         results.map(function (s, i) { var dt = shortDate(s.date); return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b>' + (s.summary ? '<span class="src-sum">' + esc(s.summary) + '</span>' : '') + '<em>' + esc(hostOf(s.url)) + (dt ? ' · ' + dt : '') + '</em></span></a>'; }).join('') + '</div>';
       var act = $('.msg-actions', node); if (act && act.parentNode) act.parentNode.insertBefore(src, act); else node.appendChild(src);
+      bindFold(src, function (open) { aMsg.sourcesOpen = open; save(); }); // 必须在 innerHTML+插入DOM 之后绑定，否则找不到 summary/body 直接 return
     }
 
     // 单次深度思考（仅开启思考、未开启联网时使用）
