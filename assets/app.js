@@ -213,7 +213,7 @@
       var secs = m.thinkSecs || 0;
       var label = m.thinking ? ('已深度思考' + (secs ? '（用时 ' + secs + ' 秒）' : '')) : '正在深度思考…';
       var body = stepsHtml(m.steps) || (m.thinking ? thinkMd(m.thinking) : '<span class="think-wait"><span class="dots"><i></i><i></i><i></i></span> 正在梳理思路…</span>');
-      parts.push('<details class="think-panel"' + (m.thinkOpen ? ' open' : '') + '><summary><span class="think-ico">' + ICON.brain + '</span><span data-role="think-label">' + label + '</span><span class="think-caret">▾</span></summary><div class="think-body" data-role="think-body">' + body + '</div></details>');
+      parts.push('<details class="think-panel ' + (m.thinkOpen ? 'fold-open' : 'fold-closed') + '"' + (m.thinkOpen ? ' open' : '') + '><summary><span class="think-ico">' + ICON.brain + '</span><span data-role="think-label">' + label + '</span><span class="think-caret">▾</span></summary><div class="think-body" data-role="think-body">' + body + '</div></details>');
     }
     var waitHtml = m.answering
       ? '<span class="gen-wait"><span class="dots"><i></i><i></i><i></i></span> 正在生成回答…</span>'
@@ -222,7 +222,7 @@
         : '<span class="gen-wait"><span class="dots"><i></i><i></i><i></i></span> 正在生成回答…</span>');
     parts.push('<div class="a-content" data-role="content">' + (m.content ? md(m.content) : waitHtml) + '</div>');
     if (m.sources && m.sources.length) {
-      parts.push('<details class="sources"' + (m.sourcesOpen ? ' open' : '') + '><summary class="src-head">' + ICON.globe + ' 查看了 ' + m.sources.length + ' 个网站<span class="src-caret">▾</span></summary><div class="src-grid">' +
+      parts.push('<details class="sources ' + (m.sourcesOpen ? 'fold-open' : 'fold-closed') + '"' + (m.sourcesOpen ? ' open' : '') + '><summary class="src-head">' + ICON.globe + ' 查看了 ' + m.sources.length + ' 个网站<span class="src-caret">▾</span></summary><div class="src-grid">' +
         m.sources.map(function (s, i) { var dt = shortDate(s.date); return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b>' + (s.summary ? '<span class="src-sum">' + esc(s.summary) + '</span>' : '') + '<em>' + esc(hostOf(s.url)) + (dt ? ' · ' + dt : '') + '</em></span></a>'; }).join('') + '</div></details>');
     }
     parts.push('<div class="msg-actions"><button class="ma-btn" data-copy title="复制">' + ICON.export + '</button>' +
@@ -294,27 +294,36 @@
     var body = d.querySelector('.think-body, .src-grid');
     if (!sum || !body) return;
     var DUR = 300;
-    // 初始化：闭合时把内容收起；已是 open 的直接撑开（避免刷新后内容被藏）
-    if (d.open) { body.style.maxHeight = 'none'; body.style.opacity = '1'; }
-    else { body.style.maxHeight = '0px'; body.style.opacity = '0'; }
-    sum.addEventListener('click', function (e) {
-      e.preventDefault();
-      var opening = !d.open;
-      if (opening) {
+    var isOpen = d.classList.contains('fold-open');
+    function paint(open, animate) {
+      d.classList.toggle('fold-open', open);
+      d.classList.toggle('fold-closed', !open);
+      if (!animate) {
+        body.style.maxHeight = open ? '' : '0px';
+        body.style.opacity = open ? '' : '0';
+        return;
+      }
+      if (open) {
         d.open = true;
         body.style.maxHeight = '0px'; body.style.opacity = '0';
-        // 强制回流后撑到实际高度，动画结束设为 none 以自适应后续追加内容
-        void body.offsetHeight;
+        void body.offsetHeight;                       // 强制回流
         body.style.maxHeight = body.scrollHeight + 'px';
         body.style.opacity = '1';
-        setTimeout(function () { if (d.open) body.style.maxHeight = 'none'; }, DUR + 20);
+        setTimeout(function () { if (isOpen) body.style.maxHeight = ''; }, DUR + 20);
       } else {
         body.style.maxHeight = body.scrollHeight + 'px';
         void body.offsetHeight;
         body.style.maxHeight = '0px'; body.style.opacity = '0';
-        setTimeout(function () { if (!d.open) d.open = false; }, DUR);
+        setTimeout(function () { if (!isOpen) d.open = false; }, DUR);
       }
-      if (onChange) onChange(opening);
+    }
+    // 初始态：闭合就直接把内容藏住（关键修复：不能只靠 details 的 open 属性）
+    paint(isOpen, false);
+    sum.addEventListener('click', function (e) {
+      e.preventDefault();
+      isOpen = !isOpen;
+      paint(isOpen, true);
+      if (onChange) onChange(isOpen);
     });
   }
   function scrollBottom() { var s = $('#chatScroll'); if (s) setTimeout(function () { s.scrollTop = s.scrollHeight; }, 30); }
@@ -380,6 +389,53 @@
         };
       }
       throw new Error('bad response');
+    }).catch(function (e) { clearTimeout(timer); throw e; });
+  }
+  // 原生推理·流式：边生成边回传 reasoning_content / content
+  // onThink(delta)、onAnswer(delta) 逐片段回调，onDone() 完成
+  function callReasonStream(messages, onThink, onAnswer, onDone, timeoutMs) {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, timeoutMs || 90000);
+    return fetch(API_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Access-Pass': API_PASS },
+      body: JSON.stringify({ model: REASON_MODEL, messages: messages, stream: true }), signal: ctrl.signal
+    }).then(function (r) {
+      clearTimeout(timer);
+      if (!r.ok || !r.body) throw new Error('stream http ' + r.status);
+      var reader = r.body.getReader();
+      var decoder = new TextDecoder('utf-8');
+      var buf = '';
+      function parseBlock(block) {
+        var lines = block.split(/\n/);
+        for (var i = 0; i < lines.length; i++) {
+          var ln = lines[i].trim();
+          if (!ln || ln.indexOf('data:') !== 0) continue;
+          var payload = ln.slice(5).trim();
+          if (payload === '[DONE]') return true;
+          var j; try { j = JSON.parse(payload); } catch (e) { continue; }
+          var d = j && j.choices && j.choices[0] && j.choices[0].delta;
+          if (!d) continue;
+          if (d.reasoning_content) onThink(String(d.reasoning_content));
+          if (d.content) onAnswer(String(d.content));
+        }
+        return false;
+      }
+      function pump() {
+        return reader.read().then(function (res) {
+          if (res.done) { onDone(); return; }
+          buf += decoder.decode(res.value, { stream: true });
+          var cut, pos = 0;
+          // SSE 事件以空行分隔；按 \n\n 切块，末尾残留留在 buf
+          while ((cut = buf.indexOf('\n\n', pos)) >= 0) {
+            var block = buf.slice(pos, cut);
+            pos = cut + 2;
+            if (parseBlock(block)) { onDone(); return; }
+          }
+          buf = buf.slice(pos);
+          return pump();
+        });
+      }
+      return pump();
     }).catch(function (e) { clearTimeout(timer); throw e; });
   }
   // 兜底：底层是 GLM 模型，强制把自称刷成 ChatGPT，杜绝"智谱清言/ChatGLM"等字样
@@ -733,7 +789,7 @@
       if (!node) return;
       var old = node.querySelector('.sources'); if (old) old.remove();
       if (!results.length) return;
-      var src = document.createElement('details'); src.className = 'sources'; src.open = !!aMsg.sourcesOpen;
+      var src = document.createElement('details'); src.className = 'sources ' + (aMsg.sourcesOpen ? 'fold-open' : 'fold-closed'); src.open = !!aMsg.sourcesOpen;
       bindFold(src, function (open) { aMsg.sourcesOpen = open; save(); });
       src.innerHTML = '<summary class="src-head">' + ICON.globe + ' 查看了 ' + results.length + ' 个网站<span class="src-caret">▾</span></summary><div class="src-grid">' +
         results.map(function (s, i) { var dt = shortDate(s.date); return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b>' + (s.summary ? '<span class="src-sum">' + esc(s.summary) + '</span>' : '') + '<em>' + esc(hostOf(s.url)) + (dt ? ' · ' + dt : '') + '</em></span></a>'; }).join('') + '</div>';
@@ -904,17 +960,51 @@
             '\n回答中用 [1][2] 标注来源编号。';
           msgs[0].content += tips;
         }
-        return callReasonFull(msgs, 70000).then(function (res) {
+        // 流式：思考按段边生成边展示，回答逐字实时出现，不再等全部返回才倒出
+        var thinkBuf = '', ansBuf = '', answerBegun = false, streamDone = false;
+        function flushThink(force) {
           if (myGen !== gen || done) return;
-          // 原生思考：模型真实推理，原样按行展示，不做人称/客套改写
-          var lines = String(res.reasoning || '').split(/\n/).map(function (x) { return x.trim(); })
-            .filter(function (x) { return x && x.length >= 2; });
-          if (!lines.length) lines = ['我梳理一下已知信息，权衡几种可能后给出回答。'];
-          lines.forEach(function (ln) { appendStep({ t: 'think', text: ln }); });
+          var cut = -1;
+          if (!force) {
+            for (var i = 0; i < thinkBuf.length; i++) { if (thinkBuf.charAt(i) === '\n') { cut = i; break; } }
+            if (cut < 0 && thinkBuf.length >= 120) cut = thinkBuf.length - 1; // 长段无换行也强制切，保证边想边出
+          } else if (thinkBuf.length) cut = thinkBuf.length - 1;
+          while (cut >= 0) {
+            var seg = thinkBuf.slice(0, cut + 1).trim();
+            thinkBuf = thinkBuf.slice(cut + 1);
+            if (seg.length >= 2) appendStep({ t: 'think', text: seg });
+            if (!force) {
+              cut = -1;
+              for (var k = 0; k < thinkBuf.length; k++) { if (thinkBuf.charAt(k) === '\n') { cut = k; break; } }
+              if (cut < 0 && thinkBuf.length >= 120) cut = thinkBuf.length - 1;
+            } else cut = thinkBuf.length ? thinkBuf.length - 1 : -1;
+          }
+        }
+        function beginAnswer() {
+          if (answerBegun || myGen !== gen || done) return;
+          answerBegun = true;
+          flushThink(true);
           setThinkLabel(true);
           markAnswering();
-          // 回答兜底清理客套
-          var ans = String(res.content || '').trim();
+        }
+        function onThink(delta) {
+          if (myGen !== gen || done || answerBegun) return;
+          thinkBuf += delta;
+          flushThink(false);
+        }
+        function onAnswer(delta) {
+          if (myGen !== gen || done) return;
+          beginAnswer();
+          ansBuf += delta;
+          var node = part(midVal, '[data-role="content"]');
+          if (node) { node.innerHTML = md(ansBuf) + '<span class="cursor">▍</span>'; scrollBottom(); }
+        }
+        function settleStream() {
+          if (streamDone || myGen !== gen || done) return;
+          streamDone = true;
+          flushThink(true);
+          if (!answerBegun) { answerBegun = true; setThinkLabel(true); markAnswering(); }
+          var ans = ansBuf.trim();
           if (ans) {
             ans = ans
               .replace(/(如果|如)[你您](有|需要)(其他|别的)?(问题|帮助)[，,]?(请|随时)?(告诉|联系)[我您]?[！!。]?/g, '')
@@ -923,7 +1013,14 @@
               .trim();
           }
           aMsg.content = ans || localReply(text);
-          save(); showAnswer(); finish(myGen);
+          answerTyped = true; // 流式已逐字渲染完，防止 showAnswer 再次打字
+          save();
+          var node = part(midVal, '[data-role="content"]');
+          if (node) { node.innerHTML = md(aMsg.content); scrollBottom(); }
+          finish(myGen);
+        }
+        return callReasonStream(msgs, onThink, onAnswer, settleStream, 90000).catch(function () {
+          settleStream();
         });
       });
     }
