@@ -281,9 +281,40 @@
       if (gd) gd.addEventListener('click', function () { gd.classList.toggle('on'); bd && bd.classList.remove('on'); toast('感谢反馈'); });
       if (bd) bd.addEventListener('click', function () { bd.classList.toggle('on'); gd && gd.classList.remove('on'); toast('感谢反馈'); });
       var d = $('.think-panel', node);
-      if (d) d.addEventListener('toggle', function () { m.thinkOpen = d.open; save(); });
+      if (d) bindFold(d, function (open) { m.thinkOpen = open; save(); });
       var sd = $('.sources', node);
-      if (sd) sd.addEventListener('toggle', function () { m.sourcesOpen = sd.open; save(); });
+      if (sd) bindFold(sd, function (open) { m.sourcesOpen = open; save(); });
+    });
+  }
+  // details 平滑开合：拦截 summary 点击，用 max-height + opacity 做展开/收起动画
+  function bindFold(d, onChange) {
+    if (!d || d.dataset.foldBound) return;
+    d.dataset.foldBound = '1';
+    var sum = d.querySelector('summary');
+    var body = d.querySelector('.think-body, .src-grid');
+    if (!sum || !body) return;
+    var DUR = 300;
+    // 初始化：闭合时把内容收起；已是 open 的直接撑开（避免刷新后内容被藏）
+    if (d.open) { body.style.maxHeight = 'none'; body.style.opacity = '1'; }
+    else { body.style.maxHeight = '0px'; body.style.opacity = '0'; }
+    sum.addEventListener('click', function (e) {
+      e.preventDefault();
+      var opening = !d.open;
+      if (opening) {
+        d.open = true;
+        body.style.maxHeight = '0px'; body.style.opacity = '0';
+        // 强制回流后撑到实际高度，动画结束设为 none 以自适应后续追加内容
+        void body.offsetHeight;
+        body.style.maxHeight = body.scrollHeight + 'px';
+        body.style.opacity = '1';
+        setTimeout(function () { if (d.open) body.style.maxHeight = 'none'; }, DUR + 20);
+      } else {
+        body.style.maxHeight = body.scrollHeight + 'px';
+        void body.offsetHeight;
+        body.style.maxHeight = '0px'; body.style.opacity = '0';
+        setTimeout(function () { if (!d.open) d.open = false; }, DUR);
+      }
+      if (onChange) onChange(opening);
     });
   }
   function scrollBottom() { var s = $('#chatScroll'); if (s) setTimeout(function () { s.scrollTop = s.scrollHeight; }, 30); }
@@ -543,13 +574,15 @@
   var sending = false, gen = 0;
   function setSending(v) { sending = v; var sb = $('#sendBtn'); if (sb) sb.disabled = v; sb && sb.classList.toggle('ready', !v && !!$('#msgInput').value.trim()); }
 
-  function typeText(el, text, myGen, done, renderer) {
+  function typeText(el, text, myGen, done, renderer, fast) {
     if (!el) { if (done) done(); return; }
     var render = renderer || md;
     text = String(text == null ? '' : text);
     var i = 0;
     // 真·逐字：一次一个字符；速度按长度自适应，短句看得清、长文不拖沓
+    // fast=true 用于思考段：明显加快，避免思考拖沓；回答段保持原速
     var speed = text.length <= 300 ? 16 : (text.length <= 1000 ? 9 : 5);
+    if (fast) speed = Math.max(2, Math.round(speed * 0.35));
     el.classList.add('typing');
     function tick() {
       if (myGen !== gen || !el.isConnected) { el.classList.remove('typing'); return; } // 世代失效：静默停止，绝不触发完成
@@ -585,7 +618,7 @@
     var myGen = ++gen;
 
     var aMsg = { mid: mid(), role: 'assistant', content: '', deepThink: state.deepThink, searched: state.webSearch,
-      thinking: '', sources: [], thinkOpen: true, attachments: [], steps: [] };
+      thinking: '', sources: [], thinkOpen: false, attachments: [], steps: [] };
     if (regenIndex != null && c.messages[regenIndex]) c.messages[regenIndex] = aMsg;
     else c.messages.push(aMsg);
     save(); renderMessages();
@@ -620,6 +653,7 @@
       if (g !== gen || done) return;
       done = true;
       clearTimeout(watchdog);
+      if (thinkTimer) { clearInterval(thinkTimer); thinkTimer = null; }
       setSending(false); renderChats($('#searchInput') ? $('#searchInput').value : '');
     }
     // 看门狗：最多 3 轮联网 + 思考 + 回答最长，90 秒后强制收尾，杜绝"一直不出回答"
@@ -652,7 +686,7 @@
         var node = document.createElement('div');
         node.className = 'ts-step ts-think'; node.setAttribute('data-si', idx);
         body.appendChild(node);
-        typeText(node, step.text, myGen, null, thinkMd);
+        typeText(node, step.text, myGen, null, thinkMd, true);
       } else {
         // 搜索段：整段插入，带动画
         var wrap = document.createElement('div');
@@ -670,8 +704,23 @@
         if (node) node.innerHTML = searchStepInner(aMsg.steps[index]);
       }
     }
+    var thinkTimer = null;
     function setThinkLabel(doneThinking) {
       aMsg.thinkSecs = Math.max(1, Math.round((now() - t0) / 1000));
+      if (doneThinking) {
+        aMsg.thinking = 'done';           // 完成标志：驱动标签切成"已深度思考"
+        if (thinkTimer) { clearInterval(thinkTimer); thinkTimer = null; }
+      } else if (!thinkTimer) {
+        // 思考中：每秒刷新一次秒数，计时器随 generation 结束自动清理
+        thinkTimer = setInterval(function () {
+          if (myGen !== gen || done) { clearInterval(thinkTimer); thinkTimer = null; return; }
+          var lb = part(midVal, '[data-role="think-label"]');
+          if (lb && aMsg.thinking !== 'done') {
+            aMsg.thinkSecs = Math.max(1, Math.round((now() - t0) / 1000));
+            lb.textContent = '正在思考（' + aMsg.thinkSecs + ' 秒）';
+          }
+        }, 1000);
+      }
       var label = part(midVal, '[data-role="think-label"]');
       if (label) label.textContent = (doneThinking ? '已深度思考（用时 ' : '正在思考（') + aMsg.thinkSecs + ' 秒）';
       save();
@@ -685,7 +734,7 @@
       var old = node.querySelector('.sources'); if (old) old.remove();
       if (!results.length) return;
       var src = document.createElement('details'); src.className = 'sources'; src.open = !!aMsg.sourcesOpen;
-      src.addEventListener('toggle', function () { aMsg.sourcesOpen = src.open; save(); });
+      bindFold(src, function (open) { aMsg.sourcesOpen = open; save(); });
       src.innerHTML = '<summary class="src-head">' + ICON.globe + ' 查看了 ' + results.length + ' 个网站<span class="src-caret">▾</span></summary><div class="src-grid">' +
         results.map(function (s, i) { var dt = shortDate(s.date); return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b>' + (s.summary ? '<span class="src-sum">' + esc(s.summary) + '</span>' : '') + '<em>' + esc(hostOf(s.url)) + (dt ? ' · ' + dt : '') + '</em></span></a>'; }).join('') + '</div>';
       var act = $('.msg-actions', node); if (act && act.parentNode) act.parentNode.insertBefore(src, act); else node.appendChild(src);
