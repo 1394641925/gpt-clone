@@ -10,6 +10,7 @@
   var API_URL = 'https://xcs-ai.pages.dev/';
   var API_PASS = 'sunxiaochuan666';
   var API_MODEL = 'THUDM/GLM-4-9B-0414';
+  var REASON_MODEL = 'deepseek-ai/DeepSeek-R1-0528-Qwen3-8B'; // 原生推理模型：思考真实、免费
 
   function uid() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function mid() { return 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
@@ -328,6 +329,25 @@
     }).then(function (r) { return r.json(); }).then(function (j) {
       clearTimeout(timer);
       if (j && j.choices && j.choices[0] && j.choices[0].message) return sanitizeIdentity(j.choices[0].message.content || '');
+      throw new Error('bad response');
+    }).catch(function (e) { clearTimeout(timer); throw e; });
+  }
+  // 原生推理调用：一次拿到「思考(reasoning_content) + 回答(content)」，思考是模型真实推理而非提示词扮演
+  function callReasonFull(messages, timeoutMs) {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, timeoutMs || 60000);
+    return fetch(API_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Access-Pass': API_PASS },
+      body: JSON.stringify({ model: REASON_MODEL, messages: messages, stream: false }), signal: ctrl.signal
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      clearTimeout(timer);
+      if (j && j.choices && j.choices[0] && j.choices[0].message) {
+        var m = j.choices[0].message;
+        return {
+          content: sanitizeIdentity(String(m.content == null ? '' : m.content).trim()),
+          reasoning: sanitizeIdentity(String(m.reasoning_content == null ? '' : m.reasoning_content).trim())
+        };
+      }
       throw new Error('bad response');
     }).catch(function (e) { clearTimeout(timer); throw e; });
   }
@@ -805,16 +825,75 @@
       });
     }
 
-    // 流程编排：
-    //  联网开启 → 边想边查决策循环（按需多次查询，逐段浮现）
-    //  仅思考开启 → 单次深度思考
-    //  都关闭 → 直接回答
-    var prep = useSearch ? runAgent() : (useThink ? phaseThink() : Promise.resolve());
-    Promise.resolve(prep).catch(function () {}).then(phaseAnswer).catch(function () {
-      if (myGen !== gen || done) return;
-      if (!aMsg.content) { aMsg.content = localReply(text); aMsg.fallback = true; save(); }
-      showAnswer(); finish(myGen);
-    });
+    // 原生推理流程：用推理模型的真实思考替代"提示词扮演思考"
+    // 一次调用同时拿到 reasoning_content(思考) 和 content(回答)，思考更真实、也更快
+    function nativeReason() {
+      var prep = Promise.resolve();
+      if (useSearch) {
+        // 先联网搜资料（浏览器直连 Exa，失败降级 worker），把资料喂给推理模型
+        setThinkLabel(false);
+        prep = webSearch(text).catch(function () { return []; }).then(function (list) {
+          if (myGen !== gen || done) return;
+          results = list || [];
+          if (results.length) { aMsg.sources = results.slice(); renderSources(); }
+        });
+      }
+      return prep.then(function () {
+        if (myGen !== gen || done) return;
+        if (!useSearch) setThinkLabel(false);
+        var msgs = buildMessages(c, null);
+        // 原生推理模式：system 精简为身份 + 回答风格，不塞"怎么思考/第几人称"那套约束——思考是模型真实推理，原样展示
+        msgs[0].content = IDENTITY + '\n回答简洁自然、直接给结论，不要客套收尾。';
+        // 联网资料注入 system，让模型的原生思考基于真实网页（尤其逐字原文）
+        if (results.length) {
+          var tips = '\n\n【本次联网查到的真实网页资料（标题/网址/摘要），回答时优先依据它们】\n' +
+            results.slice(0, 10).map(function (s, i) {
+              return '[' + (i + 1) + '] ' + s.title + '\n' + s.url + '\n' + (s.date ? '时间：' + shortDate(s.date) + '\n' : '') +
+                (s.summary ? '要点：' + s.summary + '\n' : '') + s.snippet;
+            }).join('\n\n') +
+            '\n【原文逐字铁律】若问题是索要诗文/歌词原文且资料含连续原文诗句，必须原样照抄，一字不改、不续写、不自创。' +
+            '\n回答中用 [1][2] 标注来源编号。';
+          msgs[0].content += tips;
+        }
+        return callReasonFull(msgs, 70000).then(function (res) {
+          if (myGen !== gen || done) return;
+          // 原生思考：模型真实推理，原样按行展示，不做人称/客套改写
+          var lines = String(res.reasoning || '').split(/\n/).map(function (x) { return x.trim(); })
+            .filter(function (x) { return x && x.length >= 2; });
+          if (!lines.length) lines = ['我梳理一下已知信息，权衡几种可能后给出回答。'];
+          lines.forEach(function (ln) { appendStep({ t: 'think', text: ln }); });
+          setThinkLabel(true);
+          markAnswering();
+          // 回答兜底清理客套
+          var ans = String(res.content || '').trim();
+          if (ans) {
+            ans = ans
+              .replace(/(如果|如)[你您](有|需要)(其他|别的)?(问题|帮助)[，,]?(请|随时)?(告诉|联系)[我您]?[！!。]?/g, '')
+              .replace(/(请|随时)(告诉|联系)[我您][！!。]?/g, '')
+              .replace(/(希望|愿)(这|以上|我的回答)(对|能对你您)?有帮助[！!。]?/g, '')
+              .trim();
+          }
+          aMsg.content = ans || localReply(text);
+          save(); showAnswer(); finish(myGen);
+        });
+      });
+    }
+
+    // 流程编排：思考开启 → 原生推理模型；只联网未开思考 → 原决策循环；都关闭 → 直接回答
+    if (useThink) {
+      nativeReason().catch(function () {
+        if (myGen !== gen || done) return;
+        if (!aMsg.content) { aMsg.content = localReply(text); aMsg.fallback = true; save(); }
+        showAnswer(); finish(myGen);
+      });
+    } else {
+      var prep = useSearch ? runAgent() : Promise.resolve();
+      Promise.resolve(prep).catch(function () {}).then(phaseAnswer).catch(function () {
+        if (myGen !== gen || done) return;
+        if (!aMsg.content) { aMsg.content = localReply(text); aMsg.fallback = true; save(); }
+        showAnswer(); finish(myGen);
+      });
+    }
   }
   function regen(idx) {
     if (sending) return;
