@@ -207,7 +207,12 @@
       var body = stepsHtml(m.steps) || (m.thinking ? thinkMd(m.thinking) : '<span class="think-wait"><span class="dots"><i></i><i></i><i></i></span> 正在梳理思路…</span>');
       parts.push('<details class="think-panel"' + (m.thinkOpen ? ' open' : '') + '><summary><span class="think-ico">' + ICON.brain + '</span><span data-role="think-label">' + label + '</span><span class="think-caret">▾</span></summary><div class="think-body" data-role="think-body">' + body + '</div></details>');
     }
-    parts.push('<div class="a-content" data-role="content">' + (m.content ? md(m.content) : '<span class="gen-wait"><span class="dots"><i></i><i></i><i></i></span> 正在生成回答…</span>') + '</div>');
+    var waitHtml = m.answering
+      ? '<span class="gen-wait"><span class="dots"><i></i><i></i><i></i></span> 正在生成回答…</span>'
+      : (m.deepThink || m.searched
+        ? '<span class="gen-wait gen-idle"></span>'
+        : '<span class="gen-wait"><span class="dots"><i></i><i></i><i></i></span> 正在生成回答…</span>');
+    parts.push('<div class="a-content" data-role="content">' + (m.content ? md(m.content) : waitHtml) + '</div>');
     if (m.sources && m.sources.length) {
       parts.push('<details class="sources"' + (m.sourcesOpen ? ' open' : '') + '><summary class="src-head">' + ICON.globe + ' 查看了 ' + m.sources.length + ' 个网站<span class="src-caret">▾</span></summary><div class="src-grid">' +
         m.sources.map(function (s, i) { var dt = shortDate(s.date); return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b>' + (s.summary ? '<span class="src-sum">' + esc(s.summary) + '</span>' : '') + '<em>' + esc(hostOf(s.url)) + (dt ? ' · ' + dt : '') + '</em></span></a>'; }).join('') + '</div></details>');
@@ -269,6 +274,8 @@
       if (bd) bd.addEventListener('click', function () { bd.classList.toggle('on'); gd && gd.classList.remove('on'); toast('感谢反馈'); });
       var d = $('.think-panel', node);
       if (d) d.addEventListener('toggle', function () { m.thinkOpen = d.open; save(); });
+      var sd = $('.sources', node);
+      if (sd) sd.addEventListener('toggle', function () { m.sourcesOpen = sd.open; save(); });
     });
   }
   function scrollBottom() { var s = $('#chatScroll'); if (s) setTimeout(function () { s.scrollTop = s.scrollHeight; }, 30); }
@@ -528,6 +535,15 @@
       }
       scrollBottom();
     }
+    // 思考/搜索全部结束后才进入回答阶段：此刻才显示"正在生成回答…"
+    function markAnswering() {
+      aMsg.answering = true; save();
+      var node = part(midVal, '[data-role="content"]');
+      if (node && !aMsg.content) {
+        node.innerHTML = '<span class="gen-wait"><span class="dots"><i></i><i></i><i></i></span> 正在生成回答…</span>';
+      }
+      scrollBottom();
+    }
     function finish(g) {
       if (g !== gen || done) return;
       done = true;
@@ -596,7 +612,8 @@
       if (!node) return;
       var old = node.querySelector('.sources'); if (old) old.remove();
       if (!results.length) return;
-      var src = document.createElement('details'); src.className = 'sources'; src.open = true;
+      var src = document.createElement('details'); src.className = 'sources'; src.open = !!aMsg.sourcesOpen;
+      src.addEventListener('toggle', function () { aMsg.sourcesOpen = src.open; save(); });
       src.innerHTML = '<summary class="src-head">' + ICON.globe + ' 查看了 ' + results.length + ' 个网站<span class="src-caret">▾</span></summary><div class="src-grid">' +
         results.map(function (s, i) { var dt = shortDate(s.date); return '<a class="src-card" href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '"><span class="src-num">' + (i + 1) + '</span><span class="src-txt"><b>' + esc(s.title || '网页') + '</b>' + (s.summary ? '<span class="src-sum">' + esc(s.summary) + '</span>' : '') + '<em>' + esc(hostOf(s.url)) + (dt ? ' · ' + dt : '') + '</em></span></a>'; }).join('') + '</div>';
       var act = $('.msg-actions', node); if (act && act.parentNode) act.parentNode.insertBefore(src, act); else node.appendChild(src);
@@ -694,6 +711,7 @@
 
     function phaseAnswer() {
       if (myGen !== gen || done) return Promise.resolve();
+      markAnswering();
       var extra = '';
       if (results.length) extra = '【实时联网资料】我本次已经成功联网，查到了下面 ' + results.length + ' 个网页（标题、网址、摘要）。请充分利用它们回答问题：\n' +
         '① 优先依据这些资料组织回答，在对应的事实后用 [1] [2] 标注来源编号，并在结尾用一句话简短说明"以上信息来自本次联网搜索"。\n' +
