@@ -312,38 +312,41 @@
     // 关键：details 永远保持展开，内容显隐只交给 body，杜绝原生 open 的瞬间显隐
     d.open = true;
 
+    function stopAnim() {
+      if (body._foldAnim) { try { body._foldAnim.cancel(); } catch (e) {} body._foldAnim = null; }
+    }
     function paint(open, animate) {
-      // 关键：必须在改 class 之前读高度。否则 .fold-closed 的 CSS 规则会先把
-      // max-height 打到 0，读到的起点就是 0，收起动画没有过渡空间。
-      var curH = body.offsetHeight; // 当前可见高度（改 class 前的真实高度）
-      d.classList.toggle('fold-open', open);
-      d.classList.toggle('fold-closed', !open);
-      var seq = (d._foldSeq || 0) + 1; d._foldSeq = seq; // 打断中途重复点击的残留帧
       if (!animate) {
-        body.style.transition = 'none';
+        stopAnim();
+        d.classList.toggle('fold-open', open);
+        d.classList.toggle('fold-closed', !open);
         body.style.maxHeight = open ? 'none' : '0px';
         body.style.opacity = open ? '1' : '0';
-        void body.offsetHeight;
-        body.style.transition = '';
         return;
       }
-      // 阶段一：关闭过渡，把起点钉死为当前实际高度（具体 px，避免从 none 跳变）
-      body.style.transition = 'none';
-      body.style.maxHeight = curH + 'px';
-      body.style.opacity = open ? '0' : '1';
-      void body.offsetHeight;       // 强制回流，让起点成为已提交状态
-      // 阶段二：下一帧恢复过渡并设终点，确保浏览器真的从起点过渡到终点
-      requestAnimationFrame(function () {
-        if (d._foldSeq !== seq) return;
-        var fullH = Math.max(body.scrollHeight, curH); // 内容完整高度
-        body.style.transition = '';
-        body.style.maxHeight = open ? fullH + 'px' : '0px';
+      // 用 Web Animations API 直接驱动 max-height + opacity：
+      // 不受 <details open> 原生显隐、CSS .fold-closed 规则与 transition 时序的互相干扰，
+      // 收起和展开两端都是具体 px，过渡稳定可见。
+      var startH = body.getBoundingClientRect().height; // 当前可见高度
+      var fullH = body.scrollHeight;                    // 内容完整高度（不受裁剪影响）
+      var endH = open ? fullH : 0;
+
+      d.classList.toggle('fold-open', open);
+      d.classList.toggle('fold-closed', !open);
+      stopAnim();
+
+      var a = body.animate([
+        { maxHeight: startH + 'px', opacity: open ? '0' : '1' },
+        { maxHeight: endH + 'px', opacity: open ? '1' : '0' }
+      ], { duration: DUR, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+      body._foldAnim = a;
+      a.onfinish = function () {
+        if (body._foldAnim !== a) return;
+        body.style.maxHeight = open ? 'none' : '0px';
         body.style.opacity = open ? '1' : '0';
-      });
-      clearTimeout(d._foldTimer);
-      d._foldTimer = setTimeout(function () {
-        if (d._foldSeq === seq && isOpen === open) body.style.maxHeight = open ? 'none' : '0px';
-      }, DUR + 60);
+        try { a.cancel(); } catch (e) {}
+        body._foldAnim = null;
+      };
     }
 
     paint(isOpen, false);
