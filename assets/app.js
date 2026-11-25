@@ -448,23 +448,66 @@
     keys.forEach(function (k) { if (t.indexOf(k.toLowerCase()) >= 0) hit++; });
     return hit;
   }
+  // 浏览器直连 Exa 免费 MCP（无需 Key、无 CF 出口反爬问题），返回干净的结构化网页结果
+  function exaSearch(query) {
+    var body = { jsonrpc: '2.0', id: 1, method: 'tools/call',
+      params: { name: 'web_search_exa', arguments: { query: query, numResults: 6 } } };
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, 22000);
+    return fetch('https://mcp.exa.ai/mcp', {
+      method: 'POST', signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
+      body: JSON.stringify(body)
+    }).then(function (r) { if (!r.ok) throw new Error('exa http ' + r.status); return r.text(); })
+      .then(function (raw) {
+        clearTimeout(timer);
+        // SSE 格式：多个 "data: {...}" 行，取最后一条含 result 的
+        var payload = null;
+        raw.split(/\r?\n/).forEach(function (ln) {
+          if (ln.indexOf('data:') === 0) {
+            try { var o = JSON.parse(ln.slice(5).trim()); if (o && o.result) payload = o; } catch (e) {}
+          }
+        });
+        if (!payload) { try { payload = JSON.parse(raw); } catch (e) {} }
+        var content = payload && payload.result && payload.result.content;
+        var text = (content || []).map(function (c) { return c.text || ''; }).join('\n');
+        // 解析 "Title: / URL: / Published: / Author: / Highlights:" 分块
+        var out = [];
+        String(text).split(/\n(?=Title: )/).forEach(function (block) {
+          block = block.trim(); if (!/^Title:/.test(block)) return;
+          var title = (block.match(/^Title:\s*(.*)$/m) || [])[1] || '';
+          var u = (block.match(/^URL:\s*(.*)$/m) || [])[1] || '';
+          var pub = (block.match(/^Published:\s*(.*)$/m) || [])[1] || '';
+          var hi = block.split(/^Highlights:\s*$/m)[1];
+          if (hi != null) hi = hi.split(/^Text:\s*$/m)[0];
+          var summary = String(hi || '').replace(/^#+\s*/gm, '').replace(/\s+/g, ' ').trim().slice(0, 2400);
+          if (u) out.push({ title: title.trim(), url: u.trim(), date: pub && pub !== 'N/A' ? pub : '', snippet: summary, summary: '' });
+        });
+        if (!out.length) throw new Error('exa empty');
+        return out;
+      })
+      .catch(function (e) { clearTimeout(timer); throw e; });
+  }
+
   function webSearch(query) {
     var q = rewriteQuery(query);
-    var url = SEARCH_URL + '?q=' + encodeURIComponent(q) + '&t=' + Date.now();
-    var ctrl = new AbortController();
-    // worker 端搜索(最多14s) + AI 相关性判断(最多9s)，前端超时放宽到 26s 避免提前中断
-    var timer = setTimeout(function () { ctrl.abort(); }, 26000);
-    return fetch(url, { signal: ctrl.signal })
-      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
-      .then(function (j) {
-        clearTimeout(timer);
-        var list = (j && j.results) || [];
-        // worker 已用大模型对每条标题+摘要做过语义相关性判断（ai:true），直接信任
-        if (j && j.ai) return list;
-        // 降级：模型判断不可用时，用关键词 bigram 剔除明显无关的来源
-        return list.filter(function (s) { return relevance(q, s.title) > 0; });
-      })
-      .catch(function () { clearTimeout(timer); return []; });
+    // 首选：浏览器直连 Exa MCP，结果干净且常含原文全文
+    return exaSearch(q).then(function (list) { return list; })
+      .catch(function () {
+        // 降级：CF worker 搜索（维基/搜索兜底）
+        var url = SEARCH_URL + '?q=' + encodeURIComponent(q) + '&t=' + Date.now();
+        var ctrl = new AbortController();
+        var timer = setTimeout(function () { ctrl.abort(); }, 26000);
+        return fetch(url, { signal: ctrl.signal })
+          .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+          .then(function (j) {
+            clearTimeout(timer);
+            var list = (j && j.results) || [];
+            if (j && j.ai) return list;
+            return list.filter(function (s) { return relevance(q, s.title) > 0; });
+          })
+          .catch(function () { clearTimeout(timer); return []; });
+      });
   }
 
   /* ============ 发送流程（世代 token 隔离，修复串台） ============ */
