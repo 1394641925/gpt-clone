@@ -660,7 +660,7 @@
     if (/翻译/.test(t)) return '我可以帮你翻译。请把需要翻译的具体内容发给我，并告诉我目标语言。';
     if (/代码|编程|python|js|函数/.test(t)) return '没问题，我可以帮你写代码或排查问题。把具体需求、语言和相关代码贴出来，我来帮你分析。';
     if (/谢谢|感谢/.test(t)) return '不客气！还有其他想了解的吗？';
-    return '我已经收到你的问题了。目前网络暂时不稳定，我会尽力帮你：\n\n• 你可以打开「联网搜索」让我查最新资料\n• 打开「深度思考」让我更细致地分析问题\n\n稍后可以再试一次，我会给出更完整的回答。';
+    return '我已经收到你的问题了，不过这次没能生成完整的回答。\n\n• 你可以点「重新生成」再试一次\n• 也可以打开「联网搜索」或切换思考档位，换个方式帮你分析\n\n稍后再试通常就好了。';
   }
 
   /* ============ 联网搜索（走服务端接口，避免浏览器跨域限制） ============ */
@@ -835,10 +835,12 @@
     setSending(true);
     var myGen = ++gen;
 
+    var oldMsg = (regenIndex != null && c.messages[regenIndex]) ? c.messages[regenIndex] : null;
     var aMsg = { mid: mid(), role: 'assistant', content: '', deepThink: state.deepThink, searched: state.webSearch,
       thinking: '', sources: [], thinkOpen: false, attachments: [], steps: [], pending: true, startedAt: now() };
+    if (oldMsg && oldMsg.retry) aMsg.retry = oldMsg.retry; // 续答时继承重试计数，避免无限重连
     genMsg = aMsg; // 当前正在生成的消息，供 stopGeneration 精确落盘
-    if (regenIndex != null && c.messages[regenIndex]) c.messages[regenIndex] = aMsg;
+    if (oldMsg) c.messages[regenIndex] = aMsg;
     else c.messages.push(aMsg);
     save(); renderMessages();
 
@@ -1089,9 +1091,13 @@
         finish(myGen);
       }).catch(function () {
         if (myGen !== gen || done) return;
-        aMsg.content = localReply(text); aMsg.fallback = true; save();
-        showAnswer();
-        finish(myGen);
+        // 网络中断：不写"网络暂时不稳定"兜底，保留 pending，回到前台自动续答
+        aMsg.pending = true; aMsg.answering = false; aMsg.retry = (aMsg.retry || 0) + 1;
+        done = true; genMsg = null; setSending(false);
+        clearTimeout(watchdog);
+        save();
+        var w = part(midVal, '[data-role="content"]');
+        if (w) w.innerHTML = '<span class="gen-wait">连接中断，回到页面后将自动继续…</span>';
       });
     }
 
@@ -1164,12 +1170,25 @@
           var node = part(midVal, '[data-role="content"]');
           if (node) { node.innerHTML = md(sanitizeIdentity(ansBuf)) + '<span class="cursor">▍</span>'; scrollBottom(); }
         }
-        function settleStream() {
+        function settleStream(interrupted) {
           if (streamDone || myGen !== gen || done) return;
           streamDone = true;
           flushThink(true);
-          if (!answerBegun) { answerBegun = true; setThinkLabel(true); markAnswering(); }
           var ans = sanitizeIdentity(ansBuf.trim());
+          // 异常中断（切后台导致连接被挂起/断开）且还没产出正文：
+          // 不写"网络暂时不稳定"这类兜底，保留 pending 交给回到前台后续答。
+          if (interrupted && !ans) {
+            aMsg.pending = true; aMsg.answering = false;
+            aMsg.retry = (aMsg.retry || 0) + 1;
+            save();
+            done = true; genMsg = null; setSending(false);
+            clearTimeout(watchdog);
+            if (thinkTimer) { clearInterval(thinkTimer); thinkTimer = null; }
+            var wait = part(midVal, '[data-role="content"]');
+            if (wait) wait.innerHTML = '<span class="gen-wait">连接中断，回到页面后将自动继续…</span>';
+            return;
+          }
+          if (!answerBegun) { answerBegun = true; setThinkLabel(true); markAnswering(); }
           if (ans) {
             ans = ans
               .replace(/(如果|如)[你您](有|需要)(其他|别的)?(问题|帮助)[，,]?(请|随时)?(告诉|联系)[我您]?[！!。]?/g, '')
@@ -1185,8 +1204,8 @@
           if (node) { node.innerHTML = md(aMsg.content); scrollBottom(); }
           finish(myGen);
         }
-        return callReasonStream(msgs, onThink, onAnswer, settleStream, 90000).catch(function () {
-          settleStream();
+        return callReasonStream(msgs, onThink, onAnswer, function () { settleStream(false); }, 90000).catch(function () {
+          settleStream(true);
         });
       });
     }
@@ -1233,6 +1252,13 @@
     var userText = '';
     for (var j = idx - 1; j >= 0; j--) if (chat.messages[j].role === 'user') { userText = chat.messages[j].content; break; }
     if (!userText) { target.pending = false; target.answering = false; save(); return; }
+    // 重试上限：连续中断超过 3 次就放弃自动续答，避免后台无限重连耗电/耗流量
+    if ((target.retry || 0) > 3) {
+      target.pending = false; target.answering = false;
+      target.content = target.content || '这次没能连上，请点重新生成再试一次。';
+      save(); renderMessages();
+      return;
+    }
     // 恢复中断时的档位与联网设置，让续答与原来一致
     state.webSearch = !!target.searched;
     state.deepThink = !!target.deepThink;
@@ -1241,6 +1267,14 @@
     save(); syncToggles(); renderMessages();
     toast('检测到中断的回答，正在继续生成…');
     setTimeout(function () { send(userText, idx); }, 400);
+  }
+  // 回到前台时：若有被中断、未完成的生成，自动续答（与刷新续答共用同一套逻辑）
+  function resumeOnVisible() {
+    if (document.hidden || sending) return;
+    var hasPending = state.chats.some(function (ch) {
+      return ch.messages.some(function (m) { return m.role === 'assistant' && m.pending; });
+    });
+    if (hasPending) resumePending();
   }
 
   /* ============ 主题 ============ */
@@ -1483,6 +1517,7 @@
     // 后台期间新到达的思考段/回答会检测 document.hidden，直接整段渲染，不再排队等定时器。
     document.addEventListener('visibilitychange', function () {
       if (document.hidden) { finishAllTypers(); scrollBottom(true); }
+      else { setTimeout(resumeOnVisible, 500); } // 回到前台：补上后台被中断的生成
     });
     $('#newChatBtn').addEventListener('click', newChat);
     $('#railNew').addEventListener('click', newChat);
