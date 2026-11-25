@@ -102,7 +102,7 @@
   }
   // 思考后处理：强制第一人称私人独白口吻，杜绝第二人称对话感与回答式结构
   function polishThink(text) {
-    return String(text == null ? '' : text)
+    var s = scrubNames(String(text == null ? '' : text))
       .replace(/(用户|对方|提问者|问我的人)(问的是|想要的是|关心的是|想知道)/g, '我面对$2')
       .replace(/(用户|对方|提问者|问我的人)/g, '我')
       // 第二人称兜底：把"你想知道/你要回答/你面对"转成属于"我"的念头
@@ -124,6 +124,7 @@
       .replace(/(可以直接回答|不需要搜索|不用搜索|无需搜索|不必搜索|直接回答就行|可以直接给出)/g, '需要先核对再回答')
       .replace(/(我记得|我确定|我记得是|我敢肯定)/g, '印象里')
       .replace(/\s{2,}/g, ' ').trim();
+    return s;
   }
   // 从模型输出里稳健解析决策 JSON（容忍前后文字、代码块包裹）
   function parseDecision(raw) {
@@ -977,13 +978,11 @@
     function nativeReason() {
       var prep = Promise.resolve();
       if (useSearch) {
-        // 先联网搜资料（浏览器直连 Exa，失败降级 worker），把资料喂给推理模型
+        // 按需搜索：先跑决策循环，模型边想边判断"要不要联网、搜什么、够不够"，
+        // 只有判断需要时才真正调用 webSearch，避免打开权限就盲目搜索；可多轮。
+        // 决策循环会把搜到的资料累积进 results，收敛后交给下面的原生推理做最终回答。
         setThinkLabel(false);
-        prep = webSearch(text).catch(function () { return []; }).then(function (list) {
-          if (myGen !== gen || done) return;
-          results = list || [];
-          if (results.length) { aMsg.sources = results.slice(); renderSources(); }
-        });
+        prep = runAgent();
       }
       return prep.then(function () {
         if (myGen !== gen || done) return;
