@@ -313,6 +313,9 @@
     d.open = true;
 
     function paint(open, animate) {
+      // 关键：必须在改 class 之前读高度。否则 .fold-closed 的 CSS 规则会先把
+      // max-height 打到 0，读到的起点就是 0，收起动画没有过渡空间。
+      var curH = body.offsetHeight; // 当前可见高度（改 class 前的真实高度）
       d.classList.toggle('fold-open', open);
       d.classList.toggle('fold-closed', !open);
       var seq = (d._foldSeq || 0) + 1; d._foldSeq = seq; // 打断中途重复点击的残留帧
@@ -326,7 +329,6 @@
       }
       // 阶段一：关闭过渡，把起点钉死为当前实际高度（具体 px，避免从 none 跳变）
       body.style.transition = 'none';
-      var curH = body.offsetHeight; // 当前可见高度
       body.style.maxHeight = curH + 'px';
       body.style.opacity = open ? '0' : '1';
       void body.offsetHeight;       // 强制回流，让起点成为已提交状态
