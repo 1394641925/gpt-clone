@@ -315,6 +315,7 @@
     function paint(open, animate) {
       d.classList.toggle('fold-open', open);
       d.classList.toggle('fold-closed', !open);
+      var seq = (d._foldSeq || 0) + 1; d._foldSeq = seq; // 打断中途重复点击的残留帧
       if (!animate) {
         body.style.transition = 'none';
         body.style.maxHeight = open ? 'none' : '0px';
@@ -323,19 +324,24 @@
         body.style.transition = '';
         return;
       }
-      var fullH = body.scrollHeight; // 内容完整高度（不受 max-height 裁剪影响）
-      var curH = body.offsetHeight;  // 当前可见高度
-      // 起点：先钉住过渡起点并强制回流，让它成为确定的起始值
-      body.style.maxHeight = open ? '0px' : curH + 'px';
+      // 阶段一：关闭过渡，把起点钉死为当前实际高度（具体 px，避免从 none 跳变）
+      body.style.transition = 'none';
+      var curH = body.offsetHeight; // 当前可见高度
+      body.style.maxHeight = curH + 'px';
       body.style.opacity = open ? '0' : '1';
-      void body.offsetHeight;
-      // 终点：展开到完整高度，收起归零
-      body.style.maxHeight = open ? fullH + 'px' : '0px';
-      body.style.opacity = open ? '1' : '0';
+      void body.offsetHeight;       // 强制回流，让起点成为已提交状态
+      // 阶段二：下一帧恢复过渡并设终点，确保浏览器真的从起点过渡到终点
+      requestAnimationFrame(function () {
+        if (d._foldSeq !== seq) return;
+        var fullH = Math.max(body.scrollHeight, curH); // 内容完整高度
+        body.style.transition = '';
+        body.style.maxHeight = open ? fullH + 'px' : '0px';
+        body.style.opacity = open ? '1' : '0';
+      });
       clearTimeout(d._foldTimer);
       d._foldTimer = setTimeout(function () {
-        if (isOpen === open) body.style.maxHeight = open ? 'none' : '0px';
-      }, DUR + 40);
+        if (d._foldSeq === seq && isOpen === open) body.style.maxHeight = open ? 'none' : '0px';
+      }, DUR + 60);
     }
 
     paint(isOpen, false);
