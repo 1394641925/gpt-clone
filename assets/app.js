@@ -337,7 +337,15 @@
       if (onChange) onChange(isOpen);
     });
   }
-  function scrollBottom() { var s = $('#chatScroll'); if (s) setTimeout(function () { s.scrollTop = s.scrollHeight; }, 30); }
+  // 智能跟随：用户主动上翻查看历史时停止自动滚动，回到底部附近后恢复跟随
+  var userScrolledUp = false;
+  function isNearBottom(s) { return !s || s.scrollHeight - s.scrollTop - s.clientHeight < 80; }
+  function scrollBottom(force) {
+    var s = $('#chatScroll'); if (!s) return;
+    if (force) { userScrolledUp = false; s.scrollTop = s.scrollHeight; return; }
+    if (userScrolledUp) return; // 用户正在看上面的内容，不打断
+    setTimeout(function () { if (!userScrolledUp) s.scrollTop = s.scrollHeight; }, 30);
+  }
   function copyText(t) {
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(function () {});
     else { var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) {} document.body.removeChild(ta); }
@@ -694,7 +702,12 @@
 
   /* ============ 发送流程（世代 token 隔离，修复串台） ============ */
   var sending = false, gen = 0;
-  function setSending(v) { sending = v; var sb = $('#sendBtn'); if (sb) sb.disabled = v; sb && sb.classList.toggle('ready', !v && !!$('#msgInput').value.trim()); }
+  function setSending(v) {
+    sending = v;
+    var sb = $('#sendBtn'), st = $('#stopBtn');
+    if (sb) { sb.disabled = v; sb.classList.toggle('hidden-btn', v); sb.classList.toggle('ready', !v && !!($('#msgInput') && $('#msgInput').value.trim())); }
+    if (st) st.classList.toggle('show-btn', v); // 生成中显示停止键
+  }
 
   function typeText(el, text, myGen, done, renderer, fast) {
     if (!el) { if (done) done(); return; }
@@ -1293,6 +1306,13 @@
   function reopenWindow() { $('#app').classList.remove('hidden-app'); $('#closedScreen').classList.add('hidden'); }
 
   /* ============ 开关 ============ */
+  // 停止生成：让当前世代失效，所有正在进行的流式/逐字回调都会静默停下，保留已生成内容
+  function stopGeneration() {
+    if (!sending) return;
+    gen++;               // 世代失效：typeText、流式 onThink/onAnswer、watchdog 全部停
+    setSending(false);
+    toast('已停止生成');
+  }
   // 深度思考由思考档位决定：开→Thinking，关→Instant，保持档位与开关语义一致
   function setDeepThink(on) {
     state.deepThink = !!on;
@@ -1328,6 +1348,17 @@
 
   /* ============ 事件绑定 ============ */
   function bind() {
+    // 用户滚动监听：上翻暂停自动跟随，回到底部恢复（用 wheel/touch 捕获"用户主动"意图）
+    var cs = $('#chatScroll');
+    if (cs) {
+      cs.addEventListener('wheel', function (e) {
+        if (e.deltaY < 0) userScrolledUp = true; else if (isNearBottom(cs)) userScrolledUp = false;
+      }, { passive: true });
+      cs.addEventListener('touchmove', function () {
+        setTimeout(function () { userScrolledUp = !isNearBottom(cs); }, 60);
+      }, { passive: true });
+      cs.addEventListener('scroll', function () { if (isNearBottom(cs)) userScrolledUp = false; }, { passive: true });
+    }
     $('#newChatBtn').addEventListener('click', newChat);
     $('#railNew').addEventListener('click', newChat);
     $('#sideCollapse').addEventListener('click', function () { $('#sidebar').classList.add('collapsed'); $('#rail').classList.add('show'); });
@@ -1342,6 +1373,7 @@
     $('#searchInput').addEventListener('input', function (e) { renderChats(e.target.value); });
 
     $('#sendBtn').addEventListener('click', function () { send(); });
+    $('#stopBtn').addEventListener('click', stopGeneration);
     $('#msgInput').addEventListener('input', autoGrow);
     $('#msgInput').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
 
