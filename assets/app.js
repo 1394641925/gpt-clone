@@ -522,6 +522,19 @@
     return '【你当前的具体版本】' + (MODEL_TRAITS[v] || MODEL_TRAITS[TIER_THINK]) +
       '当用户问你是哪个版本、什么型号、什么档位时，据此平静作答；你始终是 OpenAI 的 ChatGPT，只是当前运行于这个思考档位。\n\n';
   }
+  // 思考强度锚点：通过"谨慎程度"拉开档位差距，直接注入推理模型的 system，
+  // 影响它 reasoning_content 里愿意投入多少推敲，而不是改写它的思考内容。
+  function reasoningEffort() {
+    if (state.model === TIER_PRO) {
+      return '【思考强度 · 最强】这是最需要严谨的任务档位。在动笔回答前，把问题拆开逐项审视：' +
+        '主动找反例、检查边界条件、质疑自己的第一直觉；涉及事实、数字、引文时多想一步是否可靠、要不要核实；' +
+        '若结论理由不够充分就继续深挖，不要轻易收敛。宁可多推理几轮，也要让结论经得起推敲。\n\n';
+    }
+    if (state.model === TIER_THINK) {
+      return '【思考强度 · 标准】认真想清楚再回答，关键处稍作推敲、核实要点即可，不必过度展开。思路清晰后就收敛作答。\n\n';
+    }
+    return ''; // Instant 不走原生推理
+  }
   // ChatGPT 语言风格锚点：让措辞、节奏、结构都贴近 GPT 官网的中文回答
   var GPT_STYLE = '【表达风格要求 · 模仿 ChatGPT 官网中文回答】\n' +
     '1. 开门见山：先用一两句话直接给出结论或核心答案，再展开细节，不要铺垫、不要复述问题。\n' +
@@ -999,7 +1012,7 @@
         if (!useSearch) setThinkLabel(false);
         var msgs = buildMessages(c, null);
         // 原生推理模式：system 精简为身份 + 回答风格，不塞"怎么思考/第几人称"那套约束——思考是模型真实推理，原样展示
-        msgs[0].content = IDENTITY + modelIdentity() + '\n回答简洁自然、直接给结论，不要客套收尾。';
+        msgs[0].content = IDENTITY + modelIdentity() + reasoningEffort() + '\n回答简洁自然、直接给结论，不要客套收尾。';
         // 联网资料注入 system，让模型的原生思考基于真实网页（尤其逐字原文）
         if (results.length) {
           var tips = '\n\n【本次联网查到的真实网页资料（标题/网址/摘要），回答时优先依据它们】\n' +
