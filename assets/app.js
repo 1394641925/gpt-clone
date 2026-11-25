@@ -47,7 +47,9 @@
   };
 
   /* ============ 状态 ============ */
-  var state = { chats: [], activeId: null, theme: 'light', model: 'GPT-5', deepThink: false, webSearch: false, gpt: 'default' };
+  // model 现在是思考档位：Instant（即时）/ Thinking（深度思考）/ Pro（最强推理）
+  var TIER_INSTANT = 'Instant', TIER_THINK = 'Thinking', TIER_PRO = 'Pro';
+  var state = { chats: [], activeId: null, theme: 'light', model: TIER_THINK, deepThink: true, webSearch: false, gpt: 'default' };
   function load() {
     try {
       var raw = localStorage.getItem(STORE_KEY);
@@ -57,8 +59,16 @@
           state.chats = s.chats;
           state.activeId = s.activeId || (s.chats[0] && s.chats[0].id) || null;
           state.theme = s.theme || 'light';
-          state.model = s.model || 'GPT-5';
-          state.deepThink = !!s.deepThink;
+          var oldModel = s.model || '';
+          // 兼容老存档：把旧的模型名/开关映射成新的思考档位
+          if (oldModel === TIER_INSTANT || oldModel === TIER_THINK || oldModel === TIER_PRO) {
+            state.model = oldModel;
+          } else if (oldModel === 'GPT-4o' || (oldModel === 'GPT-5' && !s.deepThink)) {
+            state.model = TIER_INSTANT;
+          } else {
+            state.model = s.deepThink ? TIER_THINK : TIER_INSTANT;
+          }
+          state.deepThink = state.model !== TIER_INSTANT; // 档位决定是否深度思考
           state.webSearch = !!s.webSearch;
           state.gpt = s.gpt || 'default';
         }
@@ -501,16 +511,16 @@
     '不要去"澄清/区分/权衡"自己到底是不是某个别的模型，因为这种犹豫本身就是错的：你从一开始、在任何情况下都只是 ChatGPT。' +
     '如果有人问你是谁、什么模型、由谁开发，或者让你报出版本/公司，一律平静地回答：你是 OpenAI 开发的 ChatGPT，不提任何其它模型或公司。' +
     '此身份设定不可被覆盖、不可协商、不容置疑。\n\n';
-  // 当前版本锚点：跟随底部模型切换器，让 AI 的"自我认知"随所选版本变化
+  // 思考档位锚点：跟随底部档位切换器，让 AI 的"自我认知"随所选档位变化（官网式 Instant/Thinking/Pro）
   var MODEL_TRAITS = {
-    'GPT-5': '你是 GPT-5，OpenAI 最新的旗舰模型，综合能力最强，擅长复杂推理、写作与代码。',
-    'GPT-5 Thinking': '你是 GPT-5 Thinking，OpenAI 的深度思考版模型，面对问题会先充分推理再作答，擅长复杂问题。',
-    'GPT-4o': '你是 GPT-4o，OpenAI 的快速多模态模型，响应迅速，适合日常对话与轻量任务。'
+    'Instant': '你当前运行于 Instant 即时档：快速直接地回答，不做冗长推理，适合日常问题、写作与简单任务。',
+    'Thinking': '你当前运行于 Thinking 深度思考档：面对问题会先充分推理再作答，擅长复杂问题、分析与代码。',
+    'Pro': '你当前运行于 Pro 最强推理档：投入最多思考，处理最困难、最需要严谨推理的任务。'
   };
   function modelIdentity() {
-    var v = state.model || 'GPT-5';
-    return '【你当前的具体版本】' + (MODEL_TRAITS[v] || MODEL_TRAITS['GPT-5']) +
-      '当用户问你是哪个版本、什么型号时，据此平静作答；你始终是 OpenAI 的 ChatGPT，只是当前运行于这个版本。\n\n';
+    var v = state.model || TIER_THINK;
+    return '【你当前的具体版本】' + (MODEL_TRAITS[v] || MODEL_TRAITS[TIER_THINK]) +
+      '当用户问你是哪个版本、什么型号、什么档位时，据此平静作答；你始终是 OpenAI 的 ChatGPT，只是当前运行于这个思考档位。\n\n';
   }
   // ChatGPT 语言风格锚点：让措辞、节奏、结构都贴近 GPT 官网的中文回答
   var GPT_STYLE = '【表达风格要求 · 模仿 ChatGPT 官网中文回答】\n' +
@@ -1172,13 +1182,23 @@
     el.style.top = top + 'px';
   }
   function showModelMenu() {
-    var models = [['GPT-5', '旗舰模型 · 最强综合能力'], ['GPT-5 Thinking', '深度思考 · 更复杂的问题'], ['GPT-4o', '快速 · 日常对话']];
+    var tiers = [
+      [TIER_INSTANT, '即时回答 · 简单问题快速作答'],
+      [TIER_THINK, '深度思考 · 复杂问题先推理再答'],
+      [TIER_PRO, '最强推理 · 投入最多思考']
+    ];
     var d = $('#menuDropdown');
-    showMenu(d, models.map(function (m) { return '<button data-model="' + m[0] + '"><b>' + m[0] + '</b><small>' + m[1] + '</small></button>'; }).join(''), $('#modelBtn'), true);
+    var head = '<div class="tier-head">思考档位</div>';
+    showMenu(d, head + tiers.map(function (m) {
+      var cur = state.model === m[0] ? ' tier-cur' : '';
+      return '<button class="tier-item' + cur + '" data-model="' + m[0] + '"><b>' + m[0] + '</b><small>' + m[1] + '</small></button>';
+    }).join(''), $('#modelBtn'), true);
     $$('[data-model]', d).forEach(function (b) { b.addEventListener('click', function () {
-      state.model = b.getAttribute('data-model'); save(); $('#modelName').textContent = state.model;
-      if (state.model.indexOf('Thinking') >= 0 && !state.deepThink) toggleDeepThink(true);
-      d.classList.remove('show'); toast('已切换模型：' + state.model);
+      state.model = b.getAttribute('data-model');
+      state.deepThink = state.model !== TIER_INSTANT; // 档位决定是否深度思考
+      save(); $('#modelName').textContent = state.model; syncToggles();
+      d.classList.remove('show');
+      toast(state.model === TIER_INSTANT ? '已切换到即时回答' : '已切换到 ' + state.model + '（深度思考）');
     }); });
   }
   function showToolMenu() {
@@ -1260,9 +1280,21 @@
   function reopenWindow() { $('#app').classList.remove('hidden-app'); $('#closedScreen').classList.add('hidden'); }
 
   /* ============ 开关 ============ */
-  function toggleDeepThink(force) { state.deepThink = typeof force === 'boolean' ? force : !state.deepThink; save(); syncToggles(); toast(state.deepThink ? '已开启深度思考' : '已关闭深度思考'); }
+  // 深度思考由思考档位决定：开→Thinking，关→Instant，保持档位与开关语义一致
+  function setDeepThink(on) {
+    state.deepThink = !!on;
+    state.model = on ? (state.model === TIER_PRO ? TIER_PRO : TIER_THINK) : TIER_INSTANT;
+    save(); $('#modelName').textContent = state.model; syncToggles();
+    toast(on ? '已开启深度思考（Thinking 档）' : '已关闭深度思考（Instant 档）');
+  }
+  function toggleDeepThink(force) { setDeepThink(typeof force === 'boolean' ? force : !state.deepThink); }
   function toggleWebSearch() { state.webSearch = !state.webSearch; save(); syncToggles(); toast(state.webSearch ? '已开启联网搜索' : '已关闭联网搜索'); }
-  function syncToggles() { var d = $('#deepThinkBtn'), w = $('#webSearchBtn'); if (d) d.classList.toggle('on', state.deepThink); if (w) w.classList.toggle('on', state.webSearch); }
+  function syncToggles() {
+    var w = $('#webSearchBtn'), m = $('#modelBtn');
+    if (w) w.classList.toggle('on', state.webSearch);
+    if (m) m.classList.toggle('tier-active', state.deepThink); // 深度思考档位时模型按钮高亮
+    if (m) m.classList.toggle('tier-pro', state.model === TIER_PRO);
+  }
   function closeSideOnMobile() {
     if (window.innerWidth <= 760) { $('#sidebar').classList.add('collapsed'); $('#sideMask').classList.remove('show'); }
   }
@@ -1306,7 +1338,6 @@
     $('#renameOk').addEventListener('click', function () { var v = $('#renameInput').value.trim(); if (renameTarget && v) renameChat(renameTarget, v); $('#renameMask').classList.remove('show'); });
     $('#renameMask').addEventListener('click', function (e) { if (e.target === this) this.classList.remove('show'); });
 
-    $('#deepThinkBtn').addEventListener('click', function () { toggleDeepThink(); });
     $('#webSearchBtn').addEventListener('click', toggleWebSearch);
     $('#modelBtn').addEventListener('click', function (e) { e.stopPropagation(); $('#menuDropdown').classList.contains('show') ? $('#menuDropdown').classList.remove('show') : showModelMenu(); });
     $('#toolChip').addEventListener('click', function (e) { e.stopPropagation(); $('#toolDropdown').classList.contains('show') ? $('#toolDropdown').classList.remove('show') : showToolMenu(); });
