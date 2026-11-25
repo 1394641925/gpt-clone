@@ -272,12 +272,42 @@
     ];
     return '<div class="logo-mark"><img src="assets/openai-logo.svg" alt="OpenAI" width="30" height="30"></div>' +
       '<h2>有什么可以帮忙的？</h2><p class="empty-sub">开始一段新的对话吧</p><div class="suggestions">' +
-      sugs.map(function (s) { return '<button class="sug-card" data-q="' + esc(s[2]) + '"><span class="sug-ico">' + s[0] + '</span>' + s[1] + '</button>'; }).join('') + '</div>';
+      sugs.map(function (s) { return '<button class="sug-card" data-q="' + esc(s[2]) + '"><span class="sug-ico">' + s[0] + '</span>' + s[1] + '</button>'; }).join('') + '</div>' +
+      techNoteHTML();
+  }
+  // 首次进入的「技术说明」：以 ChatGPT 口吻介绍能力与档位，末尾折叠一小块实现细节。
+  // 身份铁律：全文不出现任何底层模型/供应商名称。
+  function techNoteHTML() {
+    var features = [
+      ['三种思考档位', '做了 Instant / Thinking / Pro 三档。切换档位会改变交给模型的提示词，让它在谨慎程度和思考强度上拉开明显区别。'],
+      ['按需联网', '默认不联网，由模型自己判断要不要查资料；判断需要时才会多轮检索，结果以默认折叠的来源卡片呈现。'],
+      ['边想边答', '把模型的推理过程逐段渲染出来，边生成边显示，完成后标注用时，随时可以折叠或展开。'],
+      ['会话与交互', '会话保存在浏览器本地，支持重新生成、复制和好坏反馈；左侧可以新建、搜索和管理每段对话。']
+    ];
+    var impl = [
+      '搭建方式：界面是纯静态前端，托管在 GitHub Pages，不需要跑前端服务器。',
+      '后端配一层轻量 Worker，负责转发模型接口请求、带上访问凭证，并在检索失败时兜底；前端直连检索服务，两条路互为备份。',
+      '与模型之间通过流式接口通信，推理和正文走不同字段，分别渲染、边到边显示。',
+      '全部状态存在浏览器本地，用会话 ID 加生成令牌防止串台；刷新后未完成的回答会自动续上。',
+      '切到后台会检测页面可见性并立即补全动画，绕开浏览器节流；开合动效用 Web Animations API 驱动，收起展开都平滑。'
+    ];
+    return '<details class="tech-note fold-closed"><summary class="tn-head">' + ICON.bulb +
+      ' 关于这个仿站 · 开发者手记<span class="tn-caret">▾</span></summary><div class="tn-body">' +
+      '<p class="tn-intro">你好，我是这个仿站的开发者。第一次来，简单聊聊我是怎么把它搭起来的，以及背后的一些技术选择。</p>' +
+      '<div class="tn-grid">' + features.map(function (f) {
+        return '<div class="tn-item"><b>' + f[0] + '</b><span>' + f[1] + '</span></div>';
+      }).join('') + '</div>' +
+      '<details class="tn-impl fold-closed"><summary class="tn-impl-head">技术细节（点击展开）<span class="tn-caret">▾</span></summary>' +
+      '<ul class="tn-impl-body">' + impl.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></details>' +
+      '</div></details>';
   }
   function bindSuggestions() {
     $$('.sug-card').forEach(function (b) {
       b.addEventListener('click', function () { $('#msgInput').value = b.getAttribute('data-q'); $('#msgInput').focus(); autoGrow(); });
     });
+    var d = $('.tech-note'), sd = $('.tn-impl');
+    if (d) bindFold(d);
+    if (sd) bindFold(sd);
   }
   function bindMsgActions() {
     var c = activeChat(); if (!c) return;
@@ -304,7 +334,7 @@
     if (!d || d.dataset.foldBound) return;
     d.dataset.foldBound = '1';
     var sum = d.querySelector('summary');
-    var body = d.querySelector('.think-body, .src-grid');
+    var body = d.querySelector('.think-body, .src-grid, .tn-body, .tn-impl-body');
     if (!sum || !body) return;
     var DUR = 510; // 与 CSS max-height .5s 对齐，刻意放慢，方便看清开合过程
     var isOpen = d.classList.contains('fold-open');
