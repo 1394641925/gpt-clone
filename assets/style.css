@@ -217,8 +217,9 @@ html.dark .search-badge{color:#7db2ff;background:rgba(125,178,255,.12)}
 .src-sum{font-size:11px;color:var(--text-2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 
 /* 消息操作按钮 */
-.msg-actions{display:flex;gap:2px;margin-top:8px;opacity:0;transform:translateY(3px);transition:opacity .18s,transform .18s}
-.msg.assistant:hover .msg-actions{opacity:1;transform:none}
+.msg-actions{display:flex;gap:2px;margin-top:8px;opacity:1;transform:none;transition:opacity .18s,transform .18s}
+@media (hover:hover){.msg-actions{opacity:0;transform:translateY(3px)}.msg.assistant:hover .msg-actions{opacity:1;transform:none}}
+.msg-actions.busy{opacity:0;pointer-events:none}
 .ma-btn{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;
   color:var(--text-3);transition:background .14s,color .14s,transform .1s}
 .ma-btn:hover{background:var(--hover);color:var(--text)}
@@ -277,6 +278,11 @@ html.dark .model-btn.tier-pro{color:#c4a0ff}
 .send-btn:disabled{opacity:.3;cursor:not-allowed}
 .send-btn.ready{transform:scale(1.06)}
 .send-btn:not(:disabled):hover{transform:scale(1.12)}
+.send-btn.hidden-btn{display:none}
+.stop-btn{width:30px;height:30px;border-radius:50%;background:var(--text);color:var(--bg);display:none;align-items:center;justify-content:center;
+  transition:opacity .2s,transform .15s var(--ease)}
+.stop-btn.show-btn{display:flex}
+.stop-btn:hover{transform:scale(1.08);opacity:.88}
 .disclaimer{text-align:center;font-size:11px;color:var(--text-3);padding:8px 0 0}
 
 /* ===== 画布面板 ===== */
