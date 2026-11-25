@@ -701,7 +701,7 @@
   }
 
   /* ============ 发送流程（世代 token 隔离，修复串台） ============ */
-  var sending = false, gen = 0;
+  var sending = false, gen = 0, genMsg = null;
   function setSending(v) {
     sending = v;
     var sb = $('#sendBtn'), st = $('#stopBtn');
@@ -770,7 +770,8 @@
     var myGen = ++gen;
 
     var aMsg = { mid: mid(), role: 'assistant', content: '', deepThink: state.deepThink, searched: state.webSearch,
-      thinking: '', sources: [], thinkOpen: false, attachments: [], steps: [] };
+      thinking: '', sources: [], thinkOpen: false, attachments: [], steps: [], pending: true, startedAt: now() };
+    genMsg = aMsg; // 当前正在生成的消息，供 stopGeneration 精确落盘
     if (regenIndex != null && c.messages[regenIndex]) c.messages[regenIndex] = aMsg;
     else c.messages.push(aMsg);
     save(); renderMessages();
@@ -804,6 +805,8 @@
     function finish(g) {
       if (g !== gen || done) return;
       done = true;
+      aMsg.pending = false; aMsg.answering = false; save(); // 清除进行中标记：刷新时据此判断是否需要续答
+      genMsg = null;
       clearTimeout(watchdog);
       if (thinkTimer) { clearInterval(thinkTimer); thinkTimer = null; }
       setSending(false); renderChats($('#searchInput') ? $('#searchInput').value : '');
@@ -1145,6 +1148,34 @@
     for (var i = idx - 1; i >= 0; i--) if (c.messages[i].role === 'user') { userText = c.messages[i].content; break; }
     c.messages = c.messages.slice(0, idx + 1); save(); renderMessages(); send(userText, idx);
   }
+  // 刷新续答：浏览器刷新会掐断正在进行的流式请求（无法避免），但消息带 pending 标记。
+  // 启动时找到最近一条"进行中"的助手消息，用它前面的用户问题重新生成，像真 ChatGPT 一样续上。
+  // 太旧的（>30 分钟，可能来自很久以前的崩溃）只清标记、保留部分内容，不贸然重连。
+  function resumePending() {
+    var target = null, chat = null, idx = -1, changed = false;
+    for (var ci = 0; ci < state.chats.length; ci++) {
+      var msgs = state.chats[ci].messages;
+      for (var mi = 0; mi < msgs.length; mi++) {
+        var m = msgs[mi];
+        if (m.role !== 'assistant' || !m.pending) continue;
+        if (now() - (m.startedAt || 0) < 30 * 60 * 1000) {
+          if (!target || (m.startedAt || 0) > (target.startedAt || 0)) { target = m; chat = state.chats[ci]; idx = mi; }
+        } else { m.pending = false; m.answering = false; changed = true; }
+      }
+    }
+    if (!target) { if (changed) save(); return; }
+    var userText = '';
+    for (var j = idx - 1; j >= 0; j--) if (chat.messages[j].role === 'user') { userText = chat.messages[j].content; break; }
+    if (!userText) { target.pending = false; target.answering = false; save(); return; }
+    // 恢复中断时的档位与联网设置，让续答与原来一致
+    state.webSearch = !!target.searched;
+    state.deepThink = !!target.deepThink;
+    state.activeId = chat.id;
+    chat.messages = chat.messages.slice(0, idx + 1); // 保留用户问题 + 待重生的助手槽位
+    save(); syncToggles(); renderMessages();
+    toast('检测到中断的回答，正在继续生成…');
+    setTimeout(function () { send(userText, idx); }, 400);
+  }
 
   /* ============ 主题 ============ */
   function applyTheme() {
@@ -1328,6 +1359,7 @@
   function stopGeneration() {
     if (!sending) return;
     gen++;               // 世代失效：typeText、流式 onThink/onAnswer、watchdog 全部停
+    if (genMsg) { genMsg.pending = false; genMsg.answering = false; genMsg = null; }
     save();              // 落盘已生成的思考/回答（onAnswer 已增量写回 aMsg.content）
     setSending(false);
     // 清掉未完成的光标动画态
@@ -1509,6 +1541,8 @@
     renderMessages(); renderAttachments(); autoGrow();
     // 移动端默认收起侧栏（复刻官网手机布局）
     if (window.innerWidth <= 760) { $('#sidebar').classList.add('collapsed'); $('#rail').classList.remove('show'); }
+    // 刷新续答：若有被中断的生成，自动重新生成（延迟确保 UI 就绪）
+    setTimeout(resumePending, 600);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
