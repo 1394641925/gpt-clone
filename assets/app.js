@@ -275,30 +275,46 @@
       sugs.map(function (s) { return '<button class="sug-card" data-q="' + esc(s[2]) + '"><span class="sug-ico">' + s[0] + '</span>' + s[1] + '</button>'; }).join('') + '</div>' +
       techNoteHTML();
   }
-  // 首次进入的「技术说明」：以 ChatGPT 口吻介绍能力与档位，末尾折叠一小块实现细节。
-  // 身份铁律：全文不出现任何底层模型/供应商名称。
+  // 首次进入的「技术说明」：以仿站开发者口吻介绍搭建方式与技术选择。
+  // 身份约束：全文只说「模型」这个泛称，不出现任何具体模型/供应商名称。
+  var TECH_INTRO = '你好，我是这个仿站的开发者。第一次来，简单聊聊我是怎么把它搭起来的，以及背后的一些技术选择。';
+  function techNoteData() {
+    return {
+      features: [
+        ['三种思考档位', '做了 Instant / Thinking / Pro 三档。切换档位会改变交给模型的提示词，让它在谨慎程度和思考强度上拉开明显区别。'],
+        ['按需联网', '默认不联网，由模型自己判断要不要查资料；判断需要时才会多轮检索，结果以默认折叠的来源卡片呈现。'],
+        ['边想边答', '把模型的推理过程逐段渲染出来，边生成边显示，完成后标注用时，随时可以折叠或展开。'],
+        ['会话与交互', '会话保存在浏览器本地，支持重新生成、复制和好坏反馈；左侧可以新建、搜索和管理每段对话。']
+      ],
+      impl: [
+        '搭建方式：界面是纯静态前端，托管在 GitHub Pages，不需要跑前端服务器。',
+        '后端配一层轻量 Worker，负责转发模型接口请求、带上访问凭证，并在检索失败时兜底；前端直连检索服务，两条路互为备份。',
+        '与模型之间通过流式接口通信，推理和正文走不同字段，分别渲染、边到边显示。',
+        '全部状态存在浏览器本地，用会话 ID 加生成令牌防止串台；刷新后未完成的回答会自动续上。',
+        '切到后台会检测页面可见性并立即补全动画，绕开浏览器节流；开合动效用 Web Animations API 驱动，收起展开都平滑。'
+      ]
+    };
+  }
+  // 说明正文（不含外层 details 壳），空状态卡片与右上角弹窗共用
+  function techNoteInner() {
+    var d = techNoteData();
+    return '<p class="tn-intro">' + TECH_INTRO + '</p>' +
+      '<div class="tn-grid">' + d.features.map(function (f) {
+        return '<div class="tn-item"><b>' + f[0] + '</b><span>' + f[1] + '</span></div>';
+      }).join('') + '</div>' +
+      '<div class="tn-impl-title">技术细节</div>' +
+      '<ul class="tn-impl-body tn-impl-body--static">' + d.impl.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>';
+  }
   function techNoteHTML() {
-    var features = [
-      ['三种思考档位', '做了 Instant / Thinking / Pro 三档。切换档位会改变交给模型的提示词，让它在谨慎程度和思考强度上拉开明显区别。'],
-      ['按需联网', '默认不联网，由模型自己判断要不要查资料；判断需要时才会多轮检索，结果以默认折叠的来源卡片呈现。'],
-      ['边想边答', '把模型的推理过程逐段渲染出来，边生成边显示，完成后标注用时，随时可以折叠或展开。'],
-      ['会话与交互', '会话保存在浏览器本地，支持重新生成、复制和好坏反馈；左侧可以新建、搜索和管理每段对话。']
-    ];
-    var impl = [
-      '搭建方式：界面是纯静态前端，托管在 GitHub Pages，不需要跑前端服务器。',
-      '后端配一层轻量 Worker，负责转发模型接口请求、带上访问凭证，并在检索失败时兜底；前端直连检索服务，两条路互为备份。',
-      '与模型之间通过流式接口通信，推理和正文走不同字段，分别渲染、边到边显示。',
-      '全部状态存在浏览器本地，用会话 ID 加生成令牌防止串台；刷新后未完成的回答会自动续上。',
-      '切到后台会检测页面可见性并立即补全动画，绕开浏览器节流；开合动效用 Web Animations API 驱动，收起展开都平滑。'
-    ];
+    var d = techNoteData();
     return '<details class="tech-note fold-closed"><summary class="tn-head">' + ICON.bulb +
       ' 关于这个仿站 · 开发者手记<span class="tn-caret">▾</span></summary><div class="tn-body">' +
-      '<p class="tn-intro">你好，我是这个仿站的开发者。第一次来，简单聊聊我是怎么把它搭起来的，以及背后的一些技术选择。</p>' +
-      '<div class="tn-grid">' + features.map(function (f) {
+      '<p class="tn-intro">' + TECH_INTRO + '</p>' +
+      '<div class="tn-grid">' + d.features.map(function (f) {
         return '<div class="tn-item"><b>' + f[0] + '</b><span>' + f[1] + '</span></div>';
       }).join('') + '</div>' +
       '<details class="tn-impl fold-closed"><summary class="tn-impl-head">技术细节（点击展开）<span class="tn-caret">▾</span></summary>' +
-      '<ul class="tn-impl-body">' + impl.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></details>' +
+      '<ul class="tn-impl-body">' + d.impl.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></details>' +
       '</div></details>';
   }
   function bindSuggestions() {
@@ -1505,6 +1521,12 @@
     $('#exploreMask').addEventListener('click', closeExplore);
     $('#accountBtn').addEventListener('click', function () { toast('登录功能暂未开放，敬请期待'); });
 
+    function openAbout() { var b = $('#aboutBody'); if (b && !b.dataset.filled) { b.innerHTML = techNoteInner(); b.dataset.filled = '1'; } var m = $('#aboutMask'); if (m) m.classList.add('show'); }
+    function closeAbout() { var m = $('#aboutMask'); if (m) m.classList.remove('show'); }
+    $('#aboutBtn').addEventListener('click', openAbout);
+    $('#aboutClose').addEventListener('click', closeAbout);
+    $('#aboutMask').addEventListener('click', function (e) { if (e.target === this) closeAbout(); });
+
     $('#canvasToggle').addEventListener('click', function () { $('#canvasPanel').classList.toggle('hidden'); });
     $('#ccCreate').addEventListener('click', function () { var d = $('#canvasDoc'); d.hidden = !d.hidden; if (!d.hidden) $('#canvasText').focus(); });
     $('#ccSource').addEventListener('click', function () { $('#fileInput').click(); });
@@ -1536,6 +1558,7 @@
       if (e.key !== 'Escape') return;
       ['#ctxMenu', '#menuDropdown', '#toolDropdown', '#moreDropdown'].forEach(function (s) { var el = $(s); if (el) el.classList.remove('show'); });
       var rm = $('#renameMask'); if (rm) rm.classList.remove('show');
+      var am = $('#aboutMask'); if (am) am.classList.remove('show');
       closeExplore(); closeSideOnMobile();
     });
 
@@ -1543,7 +1566,7 @@
       file: [['新建对话', newChat], ['重命名对话', function () { var c = activeChat(); if (c) openRename(c.id, c.title); }], ['sep'], ['导出当前对话', function () { var c = activeChat(); if (c) exportChat(c.id); }], ['删除当前对话', function () { if (state.activeId) deleteChat(state.activeId); }]],
       edit: [['复制上一条回答', function () { var c = activeChat(); if (!c) return; for (var i = c.messages.length - 1; i >= 0; i--) if (c.messages[i].role === 'assistant') { copyText(c.messages[i].content); toast('已复制'); break; } }], ['复制全部内容', function () { var c = activeChat(); if (c) { copyText(c.messages.map(function (m) { return (m.role === 'user' ? '你: ' : 'ChatGPT: ') + (m.content || ''); }).join('\n\n')); toast('已复制全部内容'); } }], ['sep'], ['清空输入框', function () { $('#msgInput').value = ''; pendingAttachments = []; renderAttachments(); autoGrow(); }]],
       view: [['切换主题', toggleTheme], ['显示/隐藏侧栏', toggleSide], ['sep'], ['画布面板', function () { $('#canvasToggle').click(); }], ['探索 GPT', openExplore]],
-      help: [['关于 ChatGPT', function () { toast('ChatGPT · 由 OpenAI 开发的 AI 助手'); }], ['快捷键说明', function () { toast('Enter 发送 · Shift+Enter 换行'); }]]
+      help: [['关于这个仿站', function () { openAbout(); }], ['快捷键说明', function () { toast('Enter 发送 · Shift+Enter 换行'); }]]
     };
     $$('.menu-item').forEach(function (b) { b.addEventListener('click', function (e) {
       e.stopPropagation(); var key = b.getAttribute('data-menu'), d = $('#menuDropdown');
