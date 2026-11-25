@@ -297,38 +297,47 @@
       if (sd) bindFold(sd, function (open) { m.sourcesOpen = open; save(); });
     });
   }
-  // details 平滑开合：拦截 summary 点击，用 max-height + opacity 做展开/收起动画
+  // details 平滑开合：details 恒定 open，开合完全由 body 的 max-height + opacity 过渡驱动。
+  // 旧写法让 <details open> 原生显隐、CSS 的 .fold-closed 规则、inline 样式三方互相覆盖，
+  // 结果"能开不能合"——收起时 CSS 抢先把 max-height 打到 0，收起动画被吞掉。
   function bindFold(d, onChange) {
     if (!d || d.dataset.foldBound) return;
     d.dataset.foldBound = '1';
     var sum = d.querySelector('summary');
     var body = d.querySelector('.think-body, .src-grid');
     if (!sum || !body) return;
-    var DUR = 300;
+    var DUR = 510; // 与 CSS max-height .5s 对齐，刻意放慢，方便看清开合过程
     var isOpen = d.classList.contains('fold-open');
+
+    // 关键：details 永远保持展开，内容显隐只交给 body，杜绝原生 open 的瞬间显隐
+    d.open = true;
+
     function paint(open, animate) {
       d.classList.toggle('fold-open', open);
       d.classList.toggle('fold-closed', !open);
       if (!animate) {
-        body.style.maxHeight = open ? '' : '0px';
-        body.style.opacity = open ? '' : '0';
+        body.style.transition = 'none';
+        body.style.maxHeight = open ? 'none' : '0px';
+        body.style.opacity = open ? '1' : '0';
+        void body.offsetHeight;
+        body.style.transition = '';
         return;
       }
-      if (open) {
-        d.open = true;
-        body.style.maxHeight = '0px'; body.style.opacity = '0';
-        void body.offsetHeight;                       // 强制回流
-        body.style.maxHeight = body.scrollHeight + 'px';
-        body.style.opacity = '1';
-        setTimeout(function () { if (isOpen) body.style.maxHeight = ''; }, DUR + 20);
-      } else {
-        body.style.maxHeight = body.scrollHeight + 'px';
-        void body.offsetHeight;
-        body.style.maxHeight = '0px'; body.style.opacity = '0';
-        setTimeout(function () { if (!isOpen) d.open = false; }, DUR);
-      }
+      var fullH = body.scrollHeight; // 内容完整高度（不受 max-height 裁剪影响）
+      var curH = body.offsetHeight;  // 当前可见高度
+      // 起点：先钉住过渡起点并强制回流，让它成为确定的起始值
+      body.style.maxHeight = open ? '0px' : curH + 'px';
+      body.style.opacity = open ? '0' : '1';
+      void body.offsetHeight;
+      // 终点：展开到完整高度，收起归零
+      body.style.maxHeight = open ? fullH + 'px' : '0px';
+      body.style.opacity = open ? '1' : '0';
+      clearTimeout(d._foldTimer);
+      d._foldTimer = setTimeout(function () {
+        if (isOpen === open) body.style.maxHeight = open ? 'none' : '0px';
+      }, DUR + 40);
     }
-    // 初始态：闭合就直接把内容藏住（关键修复：不能只靠 details 的 open 属性）
+
     paint(isOpen, false);
     sum.addEventListener('click', function (e) {
       e.preventDefault();
