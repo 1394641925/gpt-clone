@@ -709,23 +709,40 @@
     if (st) st.classList.toggle('show-btn', v); // 生成中显示停止键
   }
 
+  // 后台节流防护：浏览器会把后台标签页的 setTimeout 钳制到 ≥1s，逐字动画会因此"卡住不动"。
+  // 维护进行中的动画集合，切到后台时一次性补全；后台新启动的动画直接整段渲染。数据始终先落盘，动画只是视觉。
+  var activeTypers = [];
+  function unregisterTyper(fn) { var i = activeTypers.indexOf(fn); if (i >= 0) activeTypers.splice(i, 1); }
+  function finishAllTypers() { var list = activeTypers.slice(); activeTypers.length = 0; for (var i = 0; i < list.length; i++) { try { list[i](); } catch (e) {} } }
+
   function typeText(el, text, myGen, done, renderer, fast) {
     if (!el) { if (done) done(); return; }
     var render = renderer || md;
     text = String(text == null ? '' : text);
+    var finished = false;
+    function complete(forceScroll) {
+      if (finished) return;
+      finished = true;
+      unregisterTyper(complete);
+      el.innerHTML = render(text); el.classList.remove('typing');
+      scrollBottom(!!forceScroll);
+      if (done) done();
+    }
+    // 后台：跳过逐字，整段立即渲染（此时定时器被节流，逐字会拖到几分钟甚至更久）
+    if (document.hidden) { complete(false); return; }
     var i = 0;
     // 真·逐字：一次一个字符；速度按长度自适应，短句看得清、长文不拖沓
     // fast=true 用于思考段：明显加快，避免思考拖沓；回答段保持原速
     var speed = text.length <= 300 ? 16 : (text.length <= 1000 ? 9 : 5);
     if (fast) speed = Math.max(2, Math.round(speed * 0.35));
     el.classList.add('typing');
+    activeTypers.push(complete);
     function tick() {
-      if (myGen !== gen || !el.isConnected) { el.classList.remove('typing'); return; } // 世代失效：静默停止，绝不触发完成
+      if (finished) return;
+      if (myGen !== gen || !el.isConnected) { finished = true; unregisterTyper(complete); el.classList.remove('typing'); return; } // 世代失效：静默停止，绝不触发完成
+      if (document.hidden) { complete(false); return; } // 打字途中切到后台：立即补全
       i += 1;
-      if (i >= text.length) {
-        el.innerHTML = render(text); el.classList.remove('typing'); scrollBottom();
-        if (done) done(); return;
-      }
+      if (i >= text.length) { complete(false); return; }
       el.innerHTML = render(text.slice(0, i)) + '<span class="cursor">▍</span>';
       scrollBottom(); setTimeout(tick, speed);
     }
@@ -1363,6 +1380,12 @@
       }, { passive: true });
       cs.addEventListener('scroll', function () { if (isNearBottom(cs)) userScrolledUp = false; }, { passive: true });
     }
+    // 切到后台：浏览器会把定时器节流到 ≥1s，逐字动画会卡住不动。
+    // 立即补全所有进行中的动画即可——数据在网络到达时已实时落盘，动画只是视觉。
+    // 后台期间新到达的思考段/回答会检测 document.hidden，直接整段渲染，不再排队等定时器。
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) { finishAllTypers(); scrollBottom(true); }
+    });
     $('#newChatBtn').addEventListener('click', newChat);
     $('#railNew').addEventListener('click', newChat);
     $('#sideCollapse').addEventListener('click', function () { $('#sidebar').classList.add('collapsed'); $('#rail').classList.add('show'); });
