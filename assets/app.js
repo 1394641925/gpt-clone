@@ -879,20 +879,20 @@
       });
     }
 
-    // 流程编排：思考开启 → 原生推理模型；只联网未开思考 → 原决策循环；都关闭 → 直接回答
+    // 流程编排：
+    // 深度思考开启 → 走原生推理（一次调用拿到模型真实 reasoning_content + content，原样展示）
+    // 仅联网 → 边想边查决策循环；都关闭 → 直接回答
+    function finalFallback() {
+      if (myGen !== gen || done) return;
+      if (!aMsg.content) { aMsg.content = localReply(text); aMsg.fallback = true; save(); }
+      showAnswer(); finish(myGen);
+    }
     if (useThink) {
-      nativeReason().catch(function () {
-        if (myGen !== gen || done) return;
-        if (!aMsg.content) { aMsg.content = localReply(text); aMsg.fallback = true; save(); }
-        showAnswer(); finish(myGen);
-      });
+      // nativeReason 内部自带联网、思考逐条展示、回答与收尾，独占整个流程
+      Promise.resolve(nativeReason()).catch(finalFallback);
     } else {
       var prep = useSearch ? runAgent() : Promise.resolve();
-      Promise.resolve(prep).catch(function () {}).then(phaseAnswer).catch(function () {
-        if (myGen !== gen || done) return;
-        if (!aMsg.content) { aMsg.content = localReply(text); aMsg.fallback = true; save(); }
-        showAnswer(); finish(myGen);
-      });
+      Promise.resolve(prep).catch(function () {}).then(phaseAnswer).catch(finalFallback);
     }
   }
   function regen(idx) {
