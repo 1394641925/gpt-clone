@@ -346,6 +346,14 @@ html.dark .model-btn.tier-pro{color:#c4a0ff}
   padding:0 12px;font-size:14px;outline:none;color:var(--text);transition:border-color .2s}
 .modal input:focus{border-color:var(--text-2)}
 .modal-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+/* 开发者手记弹窗 */
+.about-modal{width:min(560px,100%);max-height:min(82vh,680px);display:flex;flex-direction:column;padding:0;overflow:hidden}
+.about-head{display:flex;align-items:center;gap:10px;padding:18px 20px 14px;border-bottom:1px solid var(--line-2)}
+.about-head h3{margin:0;font-size:15.5px;font-weight:600;flex:1}
+.about-scroll{padding:18px 20px 22px;overflow-y:auto}
+.about-scroll .tn-intro{margin-top:0}
+.tn-impl-title{font-size:12px;color:var(--text-3);margin:16px 0 6px;padding-top:12px;border-top:1px solid var(--line-2)}
+.tn-impl-body--static{padding:0;margin:0;overflow:visible}
 .mbtn{height:34px;padding:0 16px;border-radius:8px;font-size:13px;border:1px solid var(--line);transition:background .15s,transform .1s}
 .mbtn:active{transform:scale(.96)}
 .mbtn.cancel:hover{background:var(--hover)}
@@ -392,7 +400,10 @@ html.dark .model-btn.tier-pro{color:#c4a0ff}
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12);box-shadow:0 0 0 6px rgba(229,72,77,.15)}}
 
 /* ===== 响应式 ===== */
-@media(max-width:900px){ .canvas{display:none!important} }
+@media(max-width:900px){
+  /* 手机端画布改成贴近右上角的浮层，让方块按钮点了能看到 */
+  .canvas{top:56px;right:8px;left:8px;width:auto;z-index:210}
+}
 @media(max-width:760px){
   /* 移动端复刻官网：隐藏桌面窗口标题栏 */
   .titlebar{display:none!important}
