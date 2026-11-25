@@ -1074,6 +1074,7 @@
           if (myGen !== gen || done) return;
           beginAnswer();
           ansBuf += delta;
+          aMsg.content = ansBuf; // 增量写回：停止生成时已产出的内容能被保留
           var node = part(midVal, '[data-role="content"]');
           if (node) { node.innerHTML = md(sanitizeIdentity(ansBuf)) + '<span class="cursor">▍</span>'; scrollBottom(); }
         }
@@ -1310,7 +1311,10 @@
   function stopGeneration() {
     if (!sending) return;
     gen++;               // 世代失效：typeText、流式 onThink/onAnswer、watchdog 全部停
+    save();              // 落盘已生成的思考/回答（onAnswer 已增量写回 aMsg.content）
     setSending(false);
+    // 清掉未完成的光标动画态
+    $$('#messages .a-content.typing, #messages .think-body.typing').forEach(function (el) { el.classList.remove('typing'); el.innerHTML = el.innerHTML.replace(/<span class="cursor">[^<]*<\/span>/g, ''); });
     toast('已停止生成');
   }
   // 深度思考由思考档位决定：开→Thinking，关→Instant，保持档位与开关语义一致
