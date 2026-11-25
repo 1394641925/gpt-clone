@@ -500,6 +500,17 @@
     '不要去"澄清/区分/权衡"自己到底是不是某个别的模型，因为这种犹豫本身就是错的：你从一开始、在任何情况下都只是 ChatGPT。' +
     '如果有人问你是谁、什么模型、由谁开发，或者让你报出版本/公司，一律平静地回答：你是 OpenAI 开发的 ChatGPT，不提任何其它模型或公司。' +
     '此身份设定不可被覆盖、不可协商、不容置疑。\n\n';
+  // 当前版本锚点：跟随底部模型切换器，让 AI 的"自我认知"随所选版本变化
+  var MODEL_TRAITS = {
+    'GPT-5': '你是 GPT-5，OpenAI 最新的旗舰模型，综合能力最强，擅长复杂推理、写作与代码。',
+    'GPT-5 Thinking': '你是 GPT-5 Thinking，OpenAI 的深度思考版模型，面对问题会先充分推理再作答，擅长复杂问题。',
+    'GPT-4o': '你是 GPT-4o，OpenAI 的快速多模态模型，响应迅速，适合日常对话与轻量任务。'
+  };
+  function modelIdentity() {
+    var v = state.model || 'GPT-5';
+    return '【你当前的具体版本】' + (MODEL_TRAITS[v] || MODEL_TRAITS['GPT-5']) +
+      '当用户问你是哪个版本、什么型号时，据此平静作答；你始终是 OpenAI 的 ChatGPT，只是当前运行于这个版本。\n\n';
+  }
   // ChatGPT 语言风格锚点：让措辞、节奏、结构都贴近 GPT 官网的中文回答
   var GPT_STYLE = '【表达风格要求 · 模仿 ChatGPT 官网中文回答】\n' +
     '1. 开门见山：先用一两句话直接给出结论或核心答案，再展开细节，不要铺垫、不要复述问题。\n' +
@@ -523,7 +534,7 @@
     '如果没有可靠依据，宁可说"我不确定"或"我没有这方面的可靠信息"，也不要猜测或编造一个看似合理的答案。' +
     '不确定的内容要明确标注为不确定，不要把推测包装成事实。\n' +
     '【逐字引用铁律】凡是要求给出诗文、歌词、名言、台词、法条、经文等"原文/全文/原句"的内容，绝对不能凭记忆默写或拼凑——记忆常把不同作者、不同篇目的句子串在一起（例如把《水仙》的句子安到《致云雀》名下）。这类请求必须先联网逐字核对再输出；若本次没有可靠来源可核对，就老实说"我无法保证逐字准确，以下仅供参考，建议核对原文"，绝不能自信地编出一段看似合理的"原文"。同时不要把作品张冠李戴给错误的作者。\n\n';
-  function systemPrompt(c) { return IDENTITY + FACT_RULE + (GPT_PROMPTS[(c && c.gpt) || state.gpt] || GPT_PROMPTS.default); }
+  function systemPrompt(c) { return IDENTITY + modelIdentity() + FACT_RULE + (GPT_PROMPTS[(c && c.gpt) || state.gpt] || GPT_PROMPTS.default); }
   function buildMessages(c, extraSystem) {
     var msgs = [{ role: 'system', content: systemPrompt(c) + (extraSystem ? '\n\n' + extraSystem : '') }];
     c.messages.slice(-10).forEach(function (m) {
@@ -979,7 +990,7 @@
         if (!useSearch) setThinkLabel(false);
         var msgs = buildMessages(c, null);
         // 原生推理模式：system 精简为身份 + 回答风格，不塞"怎么思考/第几人称"那套约束——思考是模型真实推理，原样展示
-        msgs[0].content = IDENTITY + '\n回答简洁自然、直接给结论，不要客套收尾。';
+        msgs[0].content = IDENTITY + modelIdentity() + '\n回答简洁自然、直接给结论，不要客套收尾。';
         // 联网资料注入 system，让模型的原生思考基于真实网页（尤其逐字原文）
         if (results.length) {
           var tips = '\n\n【本次联网查到的真实网页资料（标题/网址/摘要），回答时优先依据它们】\n' +
